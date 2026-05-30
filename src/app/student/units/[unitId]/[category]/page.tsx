@@ -121,15 +121,23 @@ export default async function UnitCategoryPage({ params, searchParams }: Categor
   });
 
   // Calculate unlocks sequentially
+  const isPreview = session.role === 'TEACHER' || session.role === 'ADMIN';
   worksheetStatuses[0].unlocked = true; // Explorer is always unlocked
-  for (let i = 1; i < worksheetStatuses.length; i++) {
-    if (worksheetStatuses[i - 1].passed) {
-      worksheetStatuses[i].unlocked = true;
+  if (isPreview) {
+    // Teachers/admins see all tiers unlocked in preview mode
+    for (let i = 1; i < worksheetStatuses.length; i++) {
+      worksheetStatuses[i].unlocked = !!worksheetStatuses[i]?.ws;
+    }
+  } else {
+    for (let i = 1; i < worksheetStatuses.length; i++) {
+      if (worksheetStatuses[i - 1].passed) {
+        worksheetStatuses[i].unlocked = true;
+      }
     }
   }
 
-  // Calculate Summit Unlock: Unlocks if Challenger is passed
-  const isChallengerPassed = worksheetStatuses[2]?.passed || false;
+  // Calculate Summit Unlock: Unlocks if Challenger is passed (or always for preview)
+  const isChallengerPassed = worksheetStatuses[2]?.passed || false || isPreview;
   const isSummitGenerated = !!summitWorksheet;
   const isSummitPassed = summitWorksheet
     ? ((db.prepare('SELECT MAX(score) as max_score FROM attempts WHERE student_id = ? AND worksheet_id = ?')

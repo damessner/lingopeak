@@ -112,6 +112,76 @@ function initDb() {
       console.error('Failed to run MORE! 1 unit migration:', error);
     }
 
+    // 1.9 Refresh Grammar CHALLENGER exemplar (ensure 6-question version)
+    try {
+      const gramCat = db.prepare(`
+        SELECT c.id FROM categories c
+        JOIN units u ON c.unit_id = u.id
+        WHERE u.title = 'Time for school' AND c.name = 'GRAMMAR'
+      `).get() as any;
+
+      if (gramCat) {
+        const existing = db.prepare("SELECT id, questions_json FROM worksheets WHERE category_id = ? AND tier = 'CHALLENGER'").get(gramCat.id) as any;
+        if (existing) {
+          try {
+            const oldQs = JSON.parse(existing.questions_json);
+            if (!Array.isArray(oldQs) || oldQs.length < 6) {
+              console.log('Migrating: Updating Grammar CHALLENGER to exemplar...');
+              db.prepare('DELETE FROM worksheets WHERE id = ?').run(existing.id);
+              db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json) VALUES (?, ?, ?, ?, ?)')
+                .run(crypto.randomUUID(), gramCat.id, 'Grammar Climber', 'CHALLENGER', JSON.stringify([
+                  {
+                    id: 'g_c1', type: 'matching_pairs',
+                    question: 'Match each singular noun to its irregular plural form.',
+                    pairs: { 'child': 'children', 'mouse': 'mice', 'man': 'men', 'foot': 'feet', 'tooth': 'teeth' },
+                  },
+                  {
+                    id: 'g_c2', type: 'fill_in_gap',
+                    question: 'Complete these classroom instructions with the correct imperative verbs.',
+                    text: '[Open] your book to page 10. [Close] the door quietly. [Write] your name on the paper. [Listen] to the teacher.',
+                  },
+                  {
+                    id: 'g_c3', type: 'drag_and_drop',
+                    question: 'Drag the correct words to complete the sentences about school.',
+                    sentences: [
+                      'There are [twenty] students in my class.',
+                      'Please [spell] your name for the register.',
+                      'The English alphabet has [twenty-six] letters.',
+                      'We have English [class] every Monday.',
+                    ],
+                    words: ['twenty', 'spell', 'twenty-six', 'class', 'count', 'fifteen'],
+                  },
+                  {
+                    id: 'g_c4', type: 'sentence_unscramble',
+                    question: 'Unscramble the words to form a correct classroom instruction.',
+                    words: ['Please', 'open', 'your', 'notebooks', '.'],
+                  },
+                  {
+                    id: 'g_c5', type: 'correct_the_mistake',
+                    question: 'Find and correct the grammar mistake in this sentence.',
+                    text: 'There is five books on the teachers desk.',
+                    mistake: 'is', correction: 'are',
+                  },
+                  {
+                    id: 'g_c6', type: 'category_sorting',
+                    question: 'Sort each statement as True or False.',
+                    categories: ['True', 'False'],
+                    items: [
+                      { text: '"Children" is the plural of "child".', category: 'True' },
+                      { text: '"Foots" is the plural of "foot".', category: 'False' },
+                      { text: 'An imperative gives a command.', category: 'True' },
+                      { text: '"Is" is used with plural subjects.', category: 'False' },
+                    ],
+                  },
+                ]));
+            }
+          } catch (e) { /* parse error, will re-seed on next deploy */ }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to refresh Grammar CHALLENGER exemplar:', error);
+    }
+
     // Skip seeding during production build static page prerendering to prevent worker collisions
     if (process.env.NEXT_PHASE === 'phase-production-build') {
       return;
