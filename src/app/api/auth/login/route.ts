@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     const isIpOrLocalhost = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(host) || host === 'localhost';
     const cookieOptions: any = {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: process.env.NODE_ENV === 'production' && request.headers.get('x-forwarded-proto') === 'https',
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: '/',
