@@ -337,36 +337,64 @@ function seedMORE1Units() {
         },
       ]));
 
-    // ----- GRAMMAR: Challenger -----
+    // ----- GRAMMAR: Challenger (Exemplar — shows off 6 question types) -----
     db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json) VALUES (?, ?, ?, ?, ?)')
       .run(crypto.randomUUID(), gId, 'Grammar Climber', 'CHALLENGER', JSON.stringify([
         {
           id: 'g_c1',
-          type: 'choice_matrix',
-          question: 'Classify each word as Singular or Plural.',
-          rows: ['child', 'children', 'mouse', 'mice', 'book', 'books', 'man'],
-          columns: ['Singular', 'Plural'],
-          answers: {
-            'child': 'Singular', 'children': 'Plural',
-            'mouse': 'Singular', 'mice': 'Plural',
-            'book': 'Singular', 'books': 'Plural',
-            'man': 'Singular',
+          type: 'matching_pairs',
+          question: 'Match each singular noun to its irregular plural form.',
+          pairs: {
+            'child': 'children',
+            'mouse': 'mice',
+            'man': 'men',
+            'foot': 'feet',
+            'tooth': 'teeth',
           },
         },
         {
           id: 'g_c2',
-          type: 'correct_the_mistake',
-          question: 'Find and correct the mistake.',
-          text: 'I has two brother and one sister.',
-          mistake: 'has',
-          correction: 'have',
+          type: 'fill_in_gap',
+          question: 'Complete these classroom instructions with the correct imperative verbs.',
+          text: '[Open] your book to page 10. [Close] the door quietly. [Write] your name on the paper. [Listen] to the teacher.',
         },
         {
           id: 'g_c3',
-          type: 'multiple_choice',
-          question: 'Which word is an imperative (command)?',
-          options: ['sleeps', 'opened', 'close', 'playing'],
-          answer: 'close',
+          type: 'drag_and_drop',
+          question: 'Drag the correct words to complete the sentences about school.',
+          sentences: [
+            'There are [twenty] students in my class.',
+            'Please [spell] your name for the register.',
+            'The English alphabet has [twenty-six] letters.',
+            'We have English [class] every Monday.',
+          ],
+          words: ['twenty', 'spell', 'twenty-six', 'class', 'count', 'fifteen'],
+        },
+        {
+          id: 'g_c4',
+          type: 'sentence_unscramble',
+          question: 'Unscramble the words to form a correct classroom instruction.',
+          words: ['Please', 'open', 'your', 'notebooks', '.'],
+        },
+        {
+          id: 'g_c5',
+          type: 'correct_the_mistake',
+          question: 'Find and correct the grammar mistake in this sentence.',
+          text: 'There is five books on the teachers desk.',
+          mistake: 'is',
+          correction: 'are',
+        },
+        {
+          id: 'g_c6',
+          type: 'category_sorting',
+          question: 'Sort each statement as True or False.',
+          categories: ['True', 'False'],
+          items: [
+            { text: '\"Children\" is the plural of \"child\".', category: 'True' },
+            { text: '\"Foots\" is the plural of \"foot\".', category: 'False' },
+            { text: 'An imperative gives a command.', category: 'True' },
+            { text: '\"Is\" is used with plural subjects.', category: 'False' },
+          ],
         },
       ]));
 
