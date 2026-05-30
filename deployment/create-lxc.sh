@@ -46,19 +46,29 @@ TEMPLATE_DIR="/var/lib/vz/template/cache"
 
 # Find local templates or local-lvm template location
 if [ ! -d "$TEMPLATE_DIR" ]; then
-  # Try to find templates storage
+  # Try to find templates storage path to locate templates directory
   TEMPLATE_STORAGE_PATH=$(pvesm path local:vztmpl/debian-12-standard_12.2-1_amd64.tar.zst 2>/dev/null || echo "")
   if [ -n "$TEMPLATE_STORAGE_PATH" ]; then
     TEMPLATE_DIR=$(dirname "$TEMPLATE_STORAGE_PATH")
   fi
 fi
 
-TEMPLATE_NAME="debian-12-standard_12.2-1_amd64.tar.zst"
+# Run pveam update to refresh template registries
+echo -e "${YELLOW}[INFO] Updating Proxmox VE template database...${NC}"
+pveam update || true
+
+# Query the cluster registry dynamically for the newest available Debian 12 standard template filename
+TEMPLATE_NAME=$(pveam available --section system | grep "debian-12-standard" | head -n 1 | awk '{print $2}' || echo "")
+
+if [ -z "$TEMPLATE_NAME" ]; then
+  # Fallback to a stable release if cluster registry query returned empty
+  TEMPLATE_NAME="debian-12-standard_12.7-1_amd64.tar.zst"
+fi
+
 TEMPLATE_PATH="$TEMPLATE_DIR/$TEMPLATE_NAME"
 
 if [ ! -f "$TEMPLATE_PATH" ]; then
-  echo -e "${YELLOW}[INFO] Downloading Debian 12 LXC template...${NC}"
-  pveam update
+  echo -e "${YELLOW}[INFO] Downloading template $TEMPLATE_NAME to local storage...${NC}"
   pveam download local $TEMPLATE_NAME
 fi
 
