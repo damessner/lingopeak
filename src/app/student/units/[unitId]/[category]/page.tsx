@@ -55,13 +55,21 @@ export default async function UnitCategoryPage({ params, searchParams }: Categor
           
           <div className="w-full">
             {/* Top Navigation */}
-            <div className="max-w-3xl mx-auto mb-6">
+            <div className="max-w-3xl mx-auto mb-6 flex items-center justify-between">
               <Link
                 href={`/student/units/${unitId}/${category}`}
                 className="text-xs font-bold text-slate-400 hover:text-indigo-400 transition-colors"
               >
                 ← Back to {uppercaseCategory} Road
               </Link>
+              {(session.role === 'TEACHER' || session.role === 'ADMIN') && (
+                <a
+                  href="/teacher/dashboard"
+                  className="text-[10px] bg-amber-500/15 text-amber-400 font-bold px-2.5 py-1 rounded-lg border border-amber-500/15 hover:bg-amber-500/25 transition-colors"
+                >
+                  👁️ Preview
+                </a>
+              )}
             </div>
 
             <WorksheetContainer worksheet={worksheetToPlay} studentId={session.userId} />
