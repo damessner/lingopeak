@@ -104,7 +104,7 @@ Completing the Explorer, Voyager, and Challenger worksheets unlocks **The Summit
 Provision LingoPeak directly on your Proxmox VE server shell (installs Debian 12, Node.js 26.2.0, PM2, and configures the daemon on container startup):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/damessner/lingopeak/main/deployment/create-lxc.sh | bash
+curl -fsSL https://raw.githubusercontent.com/damessner/lingopeak/master/deployment/create-lxc.sh | bash
 ```
 
 ### Upkeep and Updates
