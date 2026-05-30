@@ -44,7 +44,7 @@ async function verifySessionEdge(sessionStr: string | undefined): Promise<any | 
   }
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // CSRF Protection: Verify Origin/Referer for state-changing API requests
