@@ -1,0 +1,105 @@
+import db from '@/lib/db';
+import { generateCompletion } from '@/lib/aiService';
+import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
+
+export async function POST(request: NextRequest) {
+  try {
+    const { studentId, categoryId } = await request.json();
+
+    if (!studentId || !categoryId) {
+      return NextResponse.json({ error: 'studentId and categoryId are required' }, { status: 400 });
+    }
+
+    // 1. Fetch category and unit details
+    const category = db.prepare(`
+      SELECT c.name, u.title as unit_title 
+      FROM categories c 
+      JOIN units u ON c.unit_id = u.id 
+      WHERE c.id = ?
+    `).get(categoryId) as any;
+
+    if (!category) {
+      return NextResponse.json({ error: 'Category not found' }, { status: 404 });
+    }
+
+    // 2. Fetch student's attempts in this category
+    const attempts = db.prepare(`
+      SELECT a.score, a.answers_json, w.title as worksheet_title, w.questions_json 
+      FROM attempts a 
+      JOIN worksheets w ON a.worksheet_id = w.id 
+      WHERE a.student_id = ? AND w.category_id = ? AND w.tier != 'SUMMIT'
+    `).all(studentId, categoryId) as any[];
+
+    if (attempts.length === 0) {
+      return NextResponse.json({ error: 'Student must complete explorer/voyager/challenger attempts first' }, { status: 400 });
+    }
+
+    // 3. Compile context for AI
+    const studentHistory = attempts.map((att) => ({
+      worksheet: att.worksheet_title,
+      score: att.score,
+      questions: JSON.parse(att.questions_json),
+      studentAnswers: JSON.parse(att.answers_json)
+    }));
+
+    const prompt = `
+You are an expert ESL (English as a Second Language) teacher. 
+A student has finished practicing exercises in Unit category: "${category.name}".
+Here is their performance history, showing the questions asked and their answers:
+${JSON.stringify(studentHistory, null, 2)}
+
+Analyze their mistakes and struggles (e.g. grammar tenses, spelling, word ordering). 
+Generate a custom, individualized "Summit" practice test of EXACTLY 5 questions designed to target only the areas they struggled with.
+
+You MUST choose from these 4 question formats:
+1. Type 'multiple_choice':
+   { "id": "q1", "type": "multiple_choice", "question": "Choose the correct verb form: ...", "options": ["A", "B", "C", "D"], "answer": "correct_option" }
+2. Type 'fill_in_gap':
+   { "id": "q2", "type": "fill_in_gap", "question": "Complete the gap:", "text": "They [are] (be) learning English." }
+3. Type 'sentence_unscramble':
+   { "id": "q3", "type": "sentence_unscramble", "question": "Put the words in correct order:", "words": ["She", "is", "driving", "the", "car"] }
+4. Type 'matching_pairs':
+   { "id": "q4", "type": "matching_pairs", "question": "Match the opposites:", "pairs": { "hot": "cold", "big": "small", "up": "down" } }
+
+Return the response as a JSON array of 5 questions.
+Do NOT include any markdown commentary, explanation, or tags. Just return a raw, valid JSON array of questions.
+`;
+
+    // 4. Call AI completion
+    let aiResponse = await generateCompletion(prompt, true);
+    
+    // Clean up potential markdown formatting block wrapper from response
+    if (aiResponse.includes('```json')) {
+      aiResponse = aiResponse.split('```json')[1].split('```')[0].trim();
+    } else if (aiResponse.includes('```')) {
+      aiResponse = aiResponse.split('```')[1].split('```')[0].trim();
+    }
+
+    const generatedQuestions = JSON.parse(aiResponse.trim());
+
+    if (!Array.isArray(generatedQuestions) || generatedQuestions.length === 0) {
+      throw new Error('AI returned an invalid question structure');
+    }
+
+    // 5. Save the generated Summit worksheet to SQLite linked to this category
+    // Check if a Summit worksheet already exists for this category to overwrite it or create a new one.
+    // For simplicity, delete past summits in this category for this run, so they can regenerate
+    db.prepare("DELETE FROM worksheets WHERE category_id = ? AND tier = 'SUMMIT'").run(categoryId);
+
+    const worksheetId = crypto.randomUUID();
+    db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json) VALUES (?, ?, ?, ?, ?)')
+      .run(
+        worksheetId,
+        categoryId,
+        `${category.name} - Personalized Summit`,
+        'SUMMIT',
+        JSON.stringify(generatedQuestions)
+      );
+
+    return NextResponse.json({ success: true, worksheetId });
+  } catch (error: any) {
+    console.error('Failed to generate Summit worksheet:', error);
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
+  }
+}
