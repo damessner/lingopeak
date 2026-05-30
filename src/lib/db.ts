@@ -53,6 +53,23 @@ function initDb() {
       `);
     }
 
+    // 1.6 Legacy Account Invalidation Migration
+    try {
+      const legacyCountResult = db.prepare("SELECT count(*) as count FROM users WHERE password_salt IS NULL OR password_salt = ''").get() as any;
+      const legacyCount = legacyCountResult?.count || 0;
+      if (legacyCount > 0) {
+        console.log(`Migrating: Securing and forcing reset for ${legacyCount} legacy accounts...`);
+        db.prepare(`
+          UPDATE users 
+          SET password_hash = 'RESET_REQUIRED_' || password_hash, 
+              password_salt = 'RESET_REQUIRED' 
+          WHERE password_salt IS NULL OR password_salt = ''
+        `).run();
+      }
+    } catch (error) {
+      console.error('Failed to run legacy account invalidation migration:', error);
+    }
+
     // Skip seeding during production build static page prerendering to prevent worker collisions
     if (process.env.NEXT_PHASE === 'phase-production-build') {
       return;

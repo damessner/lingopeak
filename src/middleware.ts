@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const SESSION_SECRET = process.env.SESSION_SECRET || (process.env.NEXT_PHASE === 'phase-production-build' ? 'lingopeak_build_phase_dummy_secret_32_chars_long' : '');
+const SESSION_SECRET = process.env.SESSION_SECRET || (process.env.NEXT_PHASE === 'phase-production-build' ? (() => {
+  const arr = new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+})() : '');
 
 if (!SESSION_SECRET || SESSION_SECRET.length < 32) {
   throw new Error('CRITICAL CONFIGURATION ERROR: The SESSION_SECRET environment variable must be set and be at least 32 characters long.');
@@ -42,6 +46,52 @@ async function verifySessionEdge(sessionStr: string | undefined): Promise<any | 
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // CSRF Protection: Verify Origin/Referer for state-changing API requests
+  if (pathname.startsWith('/api') && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method)) {
+    const origin = request.headers.get('origin');
+    const referer = request.headers.get('referer');
+    const host = request.headers.get('host'); // e.g. 'localhost:3000' or '192.168.178.157:3000'
+
+    if (origin) {
+      try {
+        const originUrl = new URL(origin);
+        if (originUrl.host !== host) {
+          return new NextResponse(JSON.stringify({ error: 'CSRF Protection: Invalid origin' }), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+      } catch (e) {
+        return new NextResponse(JSON.stringify({ error: 'CSRF Protection: Malformed origin' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    } else if (referer) {
+      try {
+        const refererUrl = new URL(referer);
+        if (refererUrl.host !== host) {
+          return new NextResponse(JSON.stringify({ error: 'CSRF Protection: Invalid referer' }), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+      } catch (e) {
+        return new NextResponse(JSON.stringify({ error: 'CSRF Protection: Malformed referer' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    } else {
+      // If neither origin nor referer header is present on a state-changing API request, we block it to be secure
+      return new NextResponse(JSON.stringify({ error: 'CSRF Protection: Origin or Referer header required' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }
+
   const sessionCookie = request.cookies.get('session')?.value;
   const user = await verifySessionEdge(sessionCookie);
 

@@ -21,6 +21,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'studentId and newPassword are required' }, { status: 400 });
     }
 
+    // Target role validation: verify that teachers can only reset students' passwords
+    const targetUser = db.prepare('SELECT role FROM users WHERE id = ?').get(studentId) as any;
+    if (!targetUser) {
+      return NextResponse.json({ error: 'Target user not found' }, { status: 404 });
+    }
+
+    if (session.role === 'TEACHER' && targetUser.role !== 'STUDENT') {
+      return NextResponse.json({ error: 'Forbidden: Teachers can only reset Student passwords' }, { status: 403 });
+    }
+
     if (newPassword.length < 4) {
       return NextResponse.json({ error: 'Password must be at least 4 characters long' }, { status: 400 });
     }

@@ -2,9 +2,24 @@ import db, { hashPassword } from '@/lib/db';
 import { createSession } from '@/lib/session';
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { rateLimit } from '@/lib/rateLimit';
 
 export async function POST(request: NextRequest) {
   try {
+    // Apply rate limiting: 5 register attempts per 10 minutes
+    const limiter = rateLimit(request, 'register', 5, 10 * 60 * 1000);
+    if (!limiter.success) {
+      return NextResponse.json(
+        { error: 'Too many registration attempts. Please try again later.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': Math.ceil((limiter.reset - Date.now()) / 1000).toString()
+          }
+        }
+      );
+    }
+
     const { username, password, role, avatarEmoji, classId } = await request.json();
 
     if (!username || !password || !role) {
@@ -12,6 +27,21 @@ export async function POST(request: NextRequest) {
     }
 
     const cleanUsername = username.trim().toLowerCase();
+
+    // Validate username length and characters
+    if (cleanUsername.length < 3 || cleanUsername.length > 20) {
+      return NextResponse.json({ error: 'Username must be between 3 and 20 characters long' }, { status: 400 });
+    }
+
+    const usernameRegex = /^[a-zA-Z0-9_]+$/;
+    if (!usernameRegex.test(cleanUsername)) {
+      return NextResponse.json({ error: 'Username must only contain alphanumeric characters and underscores' }, { status: 400 });
+    }
+
+    // Validate password length
+    if (password.length < 4) {
+      return NextResponse.json({ error: 'Password must be at least 4 characters long' }, { status: 400 });
+    }
 
     // 1. Check if user already exists
     const existingUser = db.prepare('SELECT id FROM users WHERE username = ?').get(cleanUsername);

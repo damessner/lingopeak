@@ -129,3 +129,15 @@ CREATE TABLE IF NOT EXISTS dictionary_cache (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Database Indexes for Optimization
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_users_class_id ON users(class_id);
+CREATE INDEX IF NOT EXISTS idx_attempts_student_id ON attempts(student_id);
+CREATE INDEX IF NOT EXISTS idx_attempts_worksheet_id ON attempts(worksheet_id);
+CREATE INDEX IF NOT EXISTS idx_worksheets_category_id ON worksheets(category_id);
+CREATE INDEX IF NOT EXISTS idx_chapters_book_id ON chapters(book_id);
+CREATE INDEX IF NOT EXISTS idx_categories_unit_id ON categories(unit_id);
+CREATE INDEX IF NOT EXISTS idx_badges_student_id ON badges(student_id);
+CREATE INDEX IF NOT EXISTS idx_writing_submissions_student ON writing_submissions(student_id);
+CREATE INDEX IF NOT EXISTS idx_writing_submissions_prompt ON writing_submissions(prompt_id);
+

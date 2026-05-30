@@ -1,10 +1,25 @@
-import db, { hashPassword, hashPasswordLegacy } from '@/lib/db';
+import db, { hashPassword } from '@/lib/db';
 import { createSession } from '@/lib/session';
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { rateLimit } from '@/lib/rateLimit';
 
 export async function POST(request: NextRequest) {
   try {
+    // Apply rate limiting: 5 login requests per 1 minute
+    const limiter = rateLimit(request, 'login', 5, 60 * 1000);
+    if (!limiter.success) {
+      return NextResponse.json(
+        { error: 'Too many login attempts. Please try again later.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': Math.ceil((limiter.reset - Date.now()) / 1000).toString()
+          }
+        }
+      );
+    }
+
     const { username, password } = await request.json();
 
     if (!username || !password) {
@@ -22,22 +37,24 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Validate password
+    if (user.password_salt === 'RESET_REQUIRED') {
+      return NextResponse.json(
+        { error: 'Security Upgrade Required: Please contact a teacher or administrator to reset your password.' },
+        { status: 403 }
+      );
+    }
+
     let isPasswordCorrect = false;
     if (user.password_salt) {
       // Salted path (new PBKDF2)
       const incomingHash = hashPassword(password, user.password_salt);
       isPasswordCorrect = user.password_hash === incomingHash;
     } else {
-      // Legacy path (unsalted hash with hardcoded salt)
-      const legacyHash = hashPasswordLegacy(password);
-      isPasswordCorrect = user.password_hash === legacyHash;
-      if (isPasswordCorrect) {
-        // Upgrade legacy hash to new salted PBKDF2 hash immediately
-        const newSalt = crypto.randomBytes(16).toString('hex');
-        const newHash = hashPassword(password, newSalt);
-        db.prepare('UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?')
-          .run(newHash, newSalt, user.id);
-      }
+      // Fallback if password_salt is null/missing (which is now blocked)
+      return NextResponse.json(
+        { error: 'Security Upgrade Required: Please contact a teacher or administrator to reset your password.' },
+        { status: 403 }
+      );
     }
 
     if (!isPasswordCorrect) {

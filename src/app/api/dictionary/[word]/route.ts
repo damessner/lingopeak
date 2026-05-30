@@ -58,6 +58,10 @@ export async function GET(
       ]
     };
 
+    // Cache the fallback definition so we don't spam the API on subsequent lookups
+    db.prepare('INSERT OR REPLACE INTO dictionary_cache (word, definition_json) VALUES (?, ?)')
+      .run(cleanWord, JSON.stringify(fallbackDefinition));
+
     return NextResponse.json(fallbackDefinition);
   } catch (error: any) {
     console.error('Dictionary API Error:', error);

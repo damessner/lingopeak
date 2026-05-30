@@ -4,9 +4,23 @@ import { verifySession } from '@/lib/session';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { rateLimit } from '@/lib/rateLimit';
 
 export async function POST(request: NextRequest) {
   try {
+    // Apply rate limiting: 10 requests per 1 minute
+    const limiter = rateLimit(request, 'writing_coach', 10, 60 * 1000);
+    if (!limiter.success) {
+      return NextResponse.json(
+        { error: 'Too many feedback requests. Please try again later.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': Math.ceil((limiter.reset - Date.now()) / 1000).toString()
+          }
+        }
+      );
+    }
     // Authorize session
     const cookieStore = await cookies();
     const sessionToken = cookieStore.get('session')?.value;

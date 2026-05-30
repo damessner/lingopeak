@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
   try {
@@ -92,7 +93,7 @@ export async function POST(request: NextRequest) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
 
-    const filename = `${uploadType}_${worksheetId}_${Date.now()}${ext}`;
+    const filename = `${uploadType}_${worksheetId}_${crypto.randomUUID()}${ext}`;
     const filePath = path.join(uploadDir, filename);
 
     // Save file
