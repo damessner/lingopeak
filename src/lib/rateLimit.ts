@@ -22,7 +22,7 @@ export function rateLimit(
   const tracker = cache.get(key);
 
   // Periodic cache cleanup to avoid memory leak
-  if (cache.size > 10000) {
+  if (cache.size > 1000) {
     for (const [k, v] of cache.entries()) {
       if (now > v.resetTime) {
         cache.delete(k);

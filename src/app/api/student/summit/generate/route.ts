@@ -106,10 +106,22 @@ Do NOT include any markdown commentary, explanation, or tags. Just return a raw,
       aiResponse = aiResponse.split('```')[1].split('```')[0].trim();
     }
 
-    const generatedQuestions = JSON.parse(aiResponse.trim());
+    let generatedQuestions;
+    try {
+      generatedQuestions = JSON.parse(aiResponse.trim());
+    } catch (parseError) {
+      console.error('Failed to parse AI Summit response:', parseError, aiResponse);
+      return NextResponse.json(
+        { error: 'AI generated an invalid JSON response structure. Please try again.' },
+        { status: 502 }
+      );
+    }
 
     if (!Array.isArray(generatedQuestions) || generatedQuestions.length === 0) {
-      throw new Error('AI returned an invalid question structure');
+      return NextResponse.json(
+        { error: 'AI returned an empty or invalid question array structure. Please try again.' },
+        { status: 502 }
+      );
     }
 
     // 5. Save the generated Summit worksheet to SQLite linked to this category

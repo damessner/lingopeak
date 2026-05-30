@@ -16,10 +16,7 @@ export function hashPassword(password: string, salt: string): string {
   return crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
 }
 
-// Legacy verification hash fallback (1,000 iterations, hardcoded salt)
-export function hashPasswordLegacy(password: string): string {
-  return crypto.pbkdf2Sync(password, 'lingopeak_salt_secret', 1000, 64, 'sha512').toString('hex');
-}
+
 
 // Initialise DB tables and seed if empty
 function initDb() {

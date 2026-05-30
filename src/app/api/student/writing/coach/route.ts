@@ -121,8 +121,16 @@ Only return valid JSON. Do not include any markdown format tags like \`\`\`json 
       aiResponse = aiResponse.split('```')[1].split('```')[0].trim();
     }
 
-    // Verify valid JSON
-    const parsedFeedback = JSON.parse(aiResponse.trim());
+    let parsedFeedback;
+    try {
+      parsedFeedback = JSON.parse(aiResponse.trim());
+    } catch (parseError) {
+      console.error('Failed to parse AI Coach response:', parseError, aiResponse);
+      return NextResponse.json(
+        { error: 'AI generated an invalid JSON feedback structure. Please try again.' },
+        { status: 502 }
+      );
+    }
 
     // 5. Update SQLite submission records
     let resultSubmission: any = null;

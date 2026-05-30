@@ -77,13 +77,21 @@ export async function POST(request: NextRequest) {
     });
 
     const response = NextResponse.json({ success: true, role: finalRole });
-    response.cookies.set('session', sessionToken, {
+
+    const host = request.headers.get('host')?.split(':')[0] || '';
+    const isIpOrLocalhost = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(host) || host === 'localhost';
+    const cookieOptions: any = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: '/',
-    });
+    };
+    if (!isIpOrLocalhost && host) {
+      cookieOptions.domain = host;
+    }
+
+    response.cookies.set('session', sessionToken, cookieOptions);
 
     return response;
   } catch (error) {
