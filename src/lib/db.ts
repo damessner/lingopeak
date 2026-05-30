@@ -67,6 +67,29 @@ function initDb() {
       console.error('Failed to run legacy account invalidation migration:', error);
     }
 
+    // 1.7 Re-seed built-in accounts if they got caught in the RESET_REQUIRED migration
+    try {
+      const stuckAdmin = db.prepare("SELECT id, role, password_salt FROM users WHERE username = ? AND password_salt = 'RESET_REQUIRED'").get('admin') as any;
+      if (stuckAdmin) {
+        console.log('Re-seeding admin account with fresh salted password...');
+        const adminSalt = crypto.randomBytes(16).toString('hex');
+        const adminHash = hashPassword('password123', adminSalt);
+        db.prepare('UPDATE users SET password_hash = ?, password_salt = ? WHERE username = ?')
+          .run(adminHash, adminSalt, 'admin');
+      }
+
+      const stuckTeacher = db.prepare("SELECT id, role, password_salt FROM users WHERE username = ? AND password_salt = 'RESET_REQUIRED'").get('teacher') as any;
+      if (stuckTeacher) {
+        console.log('Re-seeding teacher account with fresh salted password...');
+        const teacherSalt = crypto.randomBytes(16).toString('hex');
+        const teacherHash = hashPassword('teacher123', teacherSalt);
+        db.prepare('UPDATE users SET password_hash = ?, password_salt = ? WHERE username = ?')
+          .run(teacherHash, teacherSalt, 'teacher');
+      }
+    } catch (error) {
+      console.error('Failed to re-seed built-in accounts:', error);
+    }
+
     // Skip seeding during production build static page prerendering to prevent worker collisions
     if (process.env.NEXT_PHASE === 'phase-production-build') {
       return;

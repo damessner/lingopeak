@@ -51,6 +51,9 @@ fi
 
 cd "$TARGET_DIR"
 
+# Remove stale development database so fresh seed creates properly salted accounts
+rm -f dev.db dev.db-shm dev.db-wal
+
 # 5. Build environment config
 if [ ! -f ".env" ]; then
   echo "$INFO Initializing production .env file..."

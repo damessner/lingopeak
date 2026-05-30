@@ -23,9 +23,12 @@ echo "$INFO Pulling latest production release from GitHub..."
 git fetch --all
 git pull origin master
 
+# Remove stale development database so fresh seed creates properly salted accounts
+rm -f dev.db dev.db-shm dev.db-wal
+
 # 3. Align packages
 echo "$INFO Verifying dependency updates..."
-npm install --omit=dev
+npm install
 
 # 4. Rebuild production bundle
 echo "$INFO Compiling Next.js assets..."
@@ -33,7 +36,9 @@ npm run build
 
 # 5. Hot reload PM2
 echo "$INFO Hot reloading Next.js daemon under PM2..."
-pm2 reload lingopeak
+pm2 delete lingopeak &> /dev/null || true
+pm2 start npm --name "lingopeak" --cwd "$(pwd)" -- start
+pm2 save
 
 echo "============================================="
 echo "$SUCCESS LingoPeak update successfully complete!"
