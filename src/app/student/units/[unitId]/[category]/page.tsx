@@ -49,6 +49,20 @@ export default async function UnitCategoryPage({ params, searchParams }: Categor
       .get(playId) as any;
 
     if (worksheetToPlay) {
+      // Map snake_case DB columns to camelCase component props
+      const worksheetProps = {
+        id: worksheetToPlay.id,
+        title: worksheetToPlay.title,
+        tier: worksheetToPlay.tier,
+        categoryId: worksheetToPlay.category_id,
+        questionsJson: worksheetToPlay.questions_json,
+        audioUrl: worksheetToPlay.audio_url,
+        imageUrl: worksheetToPlay.image_url,
+        videoUrl: worksheetToPlay.video_url,
+        transcript: worksheetToPlay.transcript,
+        isDialogue: worksheetToPlay.is_dialogue,
+      };
+
       return (
         <div className="min-h-screen bg-slate-950 text-slate-100 font-sans p-4 md:p-8 flex items-center justify-center relative">
           <div className="absolute top-[-30%] right-[-10%] w-[70%] h-[60%] rounded-full bg-indigo-600/5 blur-[120px] pointer-events-none" />
@@ -72,7 +86,7 @@ export default async function UnitCategoryPage({ params, searchParams }: Categor
               )}
             </div>
 
-            <WorksheetContainer worksheet={worksheetToPlay} studentId={session.userId} />
+            <WorksheetContainer worksheet={worksheetProps} studentId={session.userId} />
           </div>
         </div>
       );
@@ -347,7 +361,12 @@ export default async function UnitCategoryPage({ params, searchParams }: Categor
                     {isSummitPassed ? 'Practice Again' : 'Start Summit'}
                   </Link>
                 ) : (
-                  <span className="text-[10px] text-indigo-400 font-bold animate-pulse">👑 Complete Explorer, Voyager &amp; Challenger first to unlock the AI Summit</span>
+                  <SummitGeneratorButton
+                    studentId={session.userId}
+                    categoryId={categoryRecord.id}
+                    unitId={unitId}
+                    categoryName={category}
+                  />
                 )
               ) : (
                 <button
