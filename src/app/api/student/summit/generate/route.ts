@@ -1,14 +1,30 @@
 import db from '@/lib/db';
 import { generateCompletion } from '@/lib/aiService';
+import { verifySession } from '@/lib/session';
+import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
   try {
+    // Authorize session
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get('session')?.value;
+    const session = verifySession(sessionToken || '');
+
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized: Session required' }, { status: 401 });
+    }
+
     const { studentId, categoryId } = await request.json();
 
     if (!studentId || !categoryId) {
       return NextResponse.json({ error: 'studentId and categoryId are required' }, { status: 400 });
+    }
+
+    // Students cannot generate summits for other students
+    if (session.role === 'STUDENT' && session.userId !== studentId) {
+      return NextResponse.json({ error: 'Forbidden: Cannot generate worksheets for another student' }, { status: 403 });
     }
 
     // 1. Fetch category and unit details

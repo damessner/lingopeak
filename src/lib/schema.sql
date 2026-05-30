@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   username TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
+  password_salt TEXT,
   role TEXT DEFAULT 'STUDENT', -- STUDENT, TEACHER, ADMIN
   avatar_emoji TEXT DEFAULT '🎒',
   class_id TEXT,
@@ -120,3 +121,11 @@ CREATE TABLE IF NOT EXISTS writing_submissions (
   FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY(prompt_id) REFERENCES writing_prompts(id) ON DELETE CASCADE
 );
+
+-- Dictionary Cache Table
+CREATE TABLE IF NOT EXISTS dictionary_cache (
+  word TEXT PRIMARY KEY,
+  definition_json TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+

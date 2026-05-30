@@ -40,14 +40,12 @@ export default function BookReader({ chapter, studentId, onChapterPassed }: Book
     setDefinition(null);
 
     try {
-      const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${cleanWord}`);
+      const res = await fetch(`/api/dictionary/${cleanWord}`);
       if (!res.ok) {
         throw new Error('Definition not found');
       }
       const data = await res.json();
-      if (Array.isArray(data) && data[0]) {
-        setDefinition(data[0]);
-      }
+      setDefinition(data);
     } catch (e) {
       console.error(e);
       // Fallback fallback definition

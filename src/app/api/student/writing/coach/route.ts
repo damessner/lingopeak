@@ -1,14 +1,30 @@
 import db from '@/lib/db';
 import { generateCompletion } from '@/lib/aiService';
+import { verifySession } from '@/lib/session';
+import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
   try {
+    // Authorize session
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get('session')?.value;
+    const session = verifySession(sessionToken || '');
+
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized: Session required' }, { status: 401 });
+    }
+
     const { studentId, promptId, text } = await request.json();
 
     if (!studentId || !promptId || !text) {
       return NextResponse.json({ error: 'studentId, promptId and text are required' }, { status: 400 });
+    }
+
+    // Students cannot query the coach for other students
+    if (session.role === 'STUDENT' && session.userId !== studentId) {
+      return NextResponse.json({ error: 'Forbidden: Cannot access coach for another student' }, { status: 403 });
     }
 
     // 1. Fetch prompt details

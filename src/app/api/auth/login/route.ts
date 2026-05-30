@@ -1,6 +1,7 @@
-import db, { hashPassword } from '@/lib/db';
+import db, { hashPassword, hashPasswordLegacy } from '@/lib/db';
 import { createSession } from '@/lib/session';
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,8 +13,8 @@ export async function POST(request: NextRequest) {
 
     const cleanUsername = username.trim().toLowerCase();
 
-    // 1. Fetch user from DB
-    const user = db.prepare('SELECT id, username, password_hash, role, avatar_emoji, class_id FROM users WHERE username = ?')
+    // 1. Fetch user from DB (now fetching password_salt)
+    const user = db.prepare('SELECT id, username, password_hash, password_salt, role, avatar_emoji, class_id FROM users WHERE username = ?')
       .get(cleanUsername) as any;
 
     if (!user) {
@@ -21,8 +22,25 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Validate password
-    const incomingHash = hashPassword(password);
-    if (user.password_hash !== incomingHash) {
+    let isPasswordCorrect = false;
+    if (user.password_salt) {
+      // Salted path (new PBKDF2)
+      const incomingHash = hashPassword(password, user.password_salt);
+      isPasswordCorrect = user.password_hash === incomingHash;
+    } else {
+      // Legacy path (unsalted hash with hardcoded salt)
+      const legacyHash = hashPasswordLegacy(password);
+      isPasswordCorrect = user.password_hash === legacyHash;
+      if (isPasswordCorrect) {
+        // Upgrade legacy hash to new salted PBKDF2 hash immediately
+        const newSalt = crypto.randomBytes(16).toString('hex');
+        const newHash = hashPassword(password, newSalt);
+        db.prepare('UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?')
+          .run(newHash, newSalt, user.id);
+      }
+    }
+
+    if (!isPasswordCorrect) {
       return NextResponse.json({ error: 'Invalid username or password' }, { status: 401 });
     }
 

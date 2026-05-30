@@ -20,7 +20,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Hash password and generate UUID
-    const passwordHash = hashPassword(password);
+    const salt = crypto.randomBytes(16).toString('hex');
+    const passwordHash = hashPassword(password, salt);
     const userId = crypto.randomUUID();
     const finalRole = role === 'TEACHER' ? 'PENDING_TEACHER' : 'STUDENT';
 
@@ -32,9 +33,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Class selection is required for students' }, { status: 400 });
     }
 
-    // 3. Save to database
-    db.prepare('INSERT INTO users (id, username, password_hash, role, avatar_emoji, class_id) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(userId, cleanUsername, passwordHash, finalRole, finalEmoji, finalClassId);
+    // 3. Save to database (now including password_salt)
+    db.prepare('INSERT INTO users (id, username, password_hash, password_salt, role, avatar_emoji, class_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(userId, cleanUsername, passwordHash, salt, finalRole, finalEmoji, finalClassId);
 
     // 4. Create and set session cookie
     const sessionToken = createSession({

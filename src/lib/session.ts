@@ -1,6 +1,10 @@
 import crypto from 'crypto';
 
-const SESSION_SECRET = process.env.SESSION_SECRET || 'lingopeak_secret_default_key_change_me_12345';
+const SESSION_SECRET = process.env.SESSION_SECRET || (process.env.NEXT_PHASE === 'phase-production-build' ? 'lingopeak_build_phase_dummy_secret_32_chars_long' : '');
+
+if (!SESSION_SECRET || SESSION_SECRET.length < 32) {
+  throw new Error('CRITICAL CONFIGURATION ERROR: The SESSION_SECRET environment variable must be set and be at least 32 characters long.');
+}
 
 export interface UserSession {
   userId: string;

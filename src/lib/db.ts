@@ -12,7 +12,12 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
 // Password hashing utility
-export function hashPassword(password: string): string {
+export function hashPassword(password: string, salt: string): string {
+  return crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+}
+
+// Legacy verification hash fallback (1,000 iterations, hardcoded salt)
+export function hashPasswordLegacy(password: string): string {
   return crypto.pbkdf2Sync(password, 'lingopeak_salt_secret', 1000, 64, 'sha512').toString('hex');
 }
 
@@ -25,6 +30,27 @@ function initDb() {
       db.exec(schemaSql);
     } else {
       console.error(`Schema file not found at ${SCHEMA_PATH}`);
+    }
+
+    // 1.5 Inline DB Alteration / Migration Checks
+    try {
+      db.prepare('SELECT password_salt FROM users LIMIT 1').get();
+    } catch (e) {
+      console.log('Migrating: Adding password_salt column to users table...');
+      db.exec('ALTER TABLE users ADD COLUMN password_salt TEXT');
+    }
+
+    try {
+      db.prepare('SELECT word FROM dictionary_cache LIMIT 1').get();
+    } catch (e) {
+      console.log('Migrating: Creating dictionary_cache table...');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS dictionary_cache (
+          word TEXT PRIMARY KEY,
+          definition_json TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
     }
 
     // Skip seeding during production build static page prerendering to prevent worker collisions
@@ -60,14 +86,16 @@ function runSeed() {
 
     // 2. Seed Users (Admin & Teacher)
     const adminId = crypto.randomUUID();
-    const adminHash = hashPassword('password123');
-    db.prepare('INSERT OR IGNORE INTO users (id, username, password_hash, role, avatar_emoji) VALUES (?, ?, ?, ?, ?)')
-      .run(adminId, 'admin', adminHash, 'ADMIN', '👑');
+    const adminSalt = crypto.randomBytes(16).toString('hex');
+    const adminHash = hashPassword('password123', adminSalt);
+    db.prepare('INSERT OR IGNORE INTO users (id, username, password_hash, password_salt, role, avatar_emoji) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(adminId, 'admin', adminHash, adminSalt, 'ADMIN', '👑');
 
     const teacherId = crypto.randomUUID();
-    const teacherHash = hashPassword('teacher123');
-    db.prepare('INSERT OR IGNORE INTO users (id, username, password_hash, role, avatar_emoji) VALUES (?, ?, ?, ?, ?)')
-      .run(teacherId, 'teacher', teacherHash, 'TEACHER', '🦉');
+    const teacherSalt = crypto.randomBytes(16).toString('hex');
+    const teacherHash = hashPassword('teacher123', teacherSalt);
+    db.prepare('INSERT OR IGNORE INTO users (id, username, password_hash, password_salt, role, avatar_emoji) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(teacherId, 'teacher', teacherHash, teacherSalt, 'TEACHER', '🦉');
 
     // 3. Seed Units
     const unitId1 = crypto.randomUUID();

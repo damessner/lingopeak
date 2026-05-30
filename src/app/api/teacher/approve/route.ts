@@ -1,8 +1,19 @@
 import db from '@/lib/db';
+import { verifySession } from '@/lib/session';
+import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
+    // Authorize: only ADMIN can approve pending teachers
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get('session')?.value;
+    const session = verifySession(sessionToken || '');
+
+    if (!session || session.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Unauthorized: Admin access required' }, { status: 403 });
+    }
+
     const { userId } = await request.json();
 
     if (!userId) {

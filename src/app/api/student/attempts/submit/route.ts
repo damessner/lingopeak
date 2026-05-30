@@ -1,13 +1,28 @@
 import db from '@/lib/db';
+import { verifySession } from '@/lib/session';
+import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
   try {
+    // Authorize session
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get('session')?.value;
+    const session = verifySession(sessionToken || '');
+
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized: Session required' }, { status: 401 });
+    }
     const { studentId, worksheetId, score, answersJson } = await request.json();
 
     if (!studentId || !worksheetId || score === undefined || !answersJson) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
+    }
+
+    // Students cannot submit attempts for other students
+    if (session.role === 'STUDENT' && session.userId !== studentId) {
+      return NextResponse.json({ error: 'Forbidden: Cannot submit attempts for another student' }, { status: 403 });
     }
 
     const attemptId = crypto.randomUUID();

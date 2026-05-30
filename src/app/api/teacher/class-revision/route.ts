@@ -1,9 +1,19 @@
 import db from '@/lib/db';
 import { generateCompletion } from '@/lib/aiService';
+import { verifySession } from '@/lib/session';
+import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
+    // Authorize: only TEACHER or ADMIN can generate class revision planners
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get('session')?.value;
+    const session = verifySession(sessionToken || '');
+
+    if (!session || (session.role !== 'TEACHER' && session.role !== 'ADMIN')) {
+      return NextResponse.json({ error: 'Unauthorized: Teacher or Admin access required' }, { status: 403 });
+    }
     const { classId } = await request.json();
 
     if (!classId) {
