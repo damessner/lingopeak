@@ -68,7 +68,7 @@ fi
 
 # 6. Install package requirements
 echo "$INFO Installing npm dependency packages..."
-npm install --omit=dev
+npm install
 
 # 7. Compile Next.js production build
 echo "$INFO Recompiling Next.js assets..."
@@ -77,7 +77,7 @@ npm run build
 # 8. Set up PM2 background process
 echo "$INFO Initializing PM2 process configuration..."
 pm2 delete lingopeak &> /dev/null || true
-pm2 start npm --name "lingopeak" -- start --port 3000
+pm2 start npm --name "lingopeak" --cwd "$TARGET_DIR" -- start
 pm2 save
 
 # 9. Register PM2 service on system reboot/startup
