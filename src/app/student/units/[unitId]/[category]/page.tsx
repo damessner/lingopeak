@@ -94,22 +94,32 @@ export default async function UnitCategoryPage({ params, searchParams }: Categor
   });
 
   // Check if an AI Summit worksheet already exists for this student in this category
-  const summitWorksheet = db.prepare(`
-    SELECT id, title, tier 
-    FROM worksheets 
-    WHERE category_id = ? AND tier = 'SUMMIT' 
-    LIMIT 1
-  `).get(categoryRecord.id) as any; // Note: In the future, we will link summits to specific students
+  let summitWorksheet: any = null;
+  try {
+    summitWorksheet = db.prepare(`
+      SELECT id, title, tier 
+      FROM worksheets 
+      WHERE category_id = ? AND tier = 'SUMMIT' 
+      LIMIT 1
+    `).get(categoryRecord.id) as any;
+  } catch (e) {
+    console.error('Failed to fetch summit worksheet:', e);
+  }
 
   // Check attempts for each worksheet to compute unlocks and scores
   const worksheetStatuses = orderedWorksheets.map((ws, index) => {
     if (!ws) return { ws: null, passed: false, score: 0, unlocked: false };
 
     // Get student's highest score for this worksheet
-    const attempt = db.prepare('SELECT MAX(score) as max_score FROM attempts WHERE student_id = ? AND worksheet_id = ?')
-      .get(session.userId, ws.id) as any;
+    let highestScore = 0;
+    try {
+      const attempt = db.prepare('SELECT MAX(score) as max_score FROM attempts WHERE student_id = ? AND worksheet_id = ?')
+        .get(session.userId, ws.id) as any;
+      highestScore = attempt?.max_score || 0;
+    } catch (e) {
+      console.error('Failed to fetch attempt score:', e);
+    }
     
-    const highestScore = attempt?.max_score || 0;
     const passed = highestScore >= 80;
 
     return {
@@ -337,12 +347,7 @@ export default async function UnitCategoryPage({ params, searchParams }: Categor
                     {isSummitPassed ? 'Practice Again' : 'Start Summit'}
                   </Link>
                 ) : (
-                  <SummitGeneratorButton
-                    studentId={session.userId}
-                    categoryId={categoryRecord.id}
-                    unitId={unitId}
-                    categoryName={category}
-                  />
+                  <span className="text-[10px] text-indigo-400 font-bold animate-pulse">👑 Complete Explorer, Voyager &amp; Challenger first to unlock the AI Summit</span>
                 )
               ) : (
                 <button
