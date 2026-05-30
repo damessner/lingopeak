@@ -25,7 +25,13 @@ fi
 
 # 2. Select Container ID
 NEXT_CTID=$(pvesh get /cluster/nextid)
-read -p "Enter Container ID [Default: $NEXT_CTID]: " CTID
+if [ -t 0 ]; then
+  read -p "Enter Container ID [Default: $NEXT_CTID]: " CTID
+elif [ -c /dev/tty ]; then
+  read -p "Enter Container ID [Default: $NEXT_CTID]: " CTID < /dev/tty
+else
+  CTID=""
+fi
 CTID=${CTID:-$NEXT_CTID}
 
 # Check if ID already exists
@@ -37,7 +43,13 @@ fi
 # 3. Select Storage
 STORAGES=$(pvesm status -content rootdir | awk 'NR>1 {print $1}')
 DEFAULT_STORAGE=$(echo "$STORAGES" | head -n 1)
-read -p "Enter Storage Pool [Default: $DEFAULT_STORAGE]: " STORAGE
+if [ -t 0 ]; then
+  read -p "Enter Storage Pool [Default: $DEFAULT_STORAGE]: " STORAGE
+elif [ -c /dev/tty ]; then
+  read -p "Enter Storage Pool [Default: $DEFAULT_STORAGE]: " STORAGE < /dev/tty
+else
+  STORAGE=""
+fi
 STORAGE=${STORAGE:-$DEFAULT_STORAGE}
 
 # 4. OS Template provisioning
