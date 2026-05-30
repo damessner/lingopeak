@@ -90,6 +90,28 @@ function initDb() {
       console.error('Failed to re-seed built-in accounts:', error);
     }
 
+    // 1.8 MORE! 1 Textbook Restructure
+    try {
+      const oldUnits = db.prepare("SELECT id FROM units WHERE title IN ('All About Me', 'Around the World')").all() as any[];
+      if (oldUnits.length > 0) {
+        console.log('Migrating: Restructuring to MORE! 1 textbook units...');
+        db.transaction(() => {
+          for (const unit of oldUnits) {
+            db.prepare('DELETE FROM units WHERE id = ?').run(unit.id);
+          }
+          seedMORE1Units();
+        })();
+      } else {
+        const count = db.prepare('SELECT COUNT(*) as count FROM units').get() as any;
+        if (count.count === 0) {
+          console.log('Seeding MORE! 1 textbook units...');
+          seedMORE1Units();
+        }
+      }
+    } catch (error) {
+      console.error('Failed to run MORE! 1 unit migration:', error);
+    }
+
     // Skip seeding during production build static page prerendering to prevent worker collisions
     if (process.env.NEXT_PHASE === 'phase-production-build') {
       return;
@@ -134,148 +156,7 @@ function runSeed() {
     db.prepare('INSERT OR IGNORE INTO users (id, username, password_hash, password_salt, role, avatar_emoji) VALUES (?, ?, ?, ?, ?, ?)')
       .run(teacherId, 'teacher', teacherHash, teacherSalt, 'TEACHER', '🦉');
 
-    // 3. Seed Units
-    const unitId1 = crypto.randomUUID();
-    db.prepare('INSERT OR IGNORE INTO units (id, title, order_num) VALUES (?, ?, ?)')
-      .run(unitId1, 'All About Me', 1);
-
-    const unitId2 = crypto.randomUUID();
-    db.prepare('INSERT OR IGNORE INTO units (id, title, order_num) VALUES (?, ?, ?)')
-      .run(unitId2, 'Around the World', 2);
-
-    // 4. Seed Categories under Unit 1
-    const categories = ['GRAMMAR', 'VOCABULARY', 'READING', 'WRITING', 'LISTENING'];
-    const categoryIds: Record<string, string> = {};
-
-    for (const catName of categories) {
-      const catId = crypto.randomUUID();
-      db.prepare('INSERT INTO categories (id, name, unit_id) VALUES (?, ?, ?)')
-        .run(catId, catName, unitId1);
-      categoryIds[catName] = catId;
-    }
-
-    // Grammar for Unit 2
-    const u2GrammarId = crypto.randomUUID();
-    db.prepare('INSERT INTO categories (id, name, unit_id) VALUES (?, ?, ?)')
-      .run(u2GrammarId, 'GRAMMAR', unitId2);
-
-    // 5. Seed Worksheets under Unit 1 Grammar
-    const grammarCatId = categoryIds['GRAMMAR'];
-
-    // Explorer (Easy)
-    const explorerQuestions = [
-      {
-        id: 'mc1',
-        type: 'multiple_choice',
-        question: 'Choose the correct form: She _____ tennis every Saturday.',
-        options: ['play', 'plays', 'playing', 'is play'],
-        answer: 'plays'
-      },
-      {
-        id: 'gap1',
-        type: 'fill_in_gap',
-        question: 'Complete the sentence with the correct form of "be":',
-        text: 'They [are] student volunteers.',
-        answer: 'are'
-      },
-      {
-        id: 'drag1',
-        type: 'drag_and_drop',
-        question: 'Drag the correct words to complete the sentences.',
-        sentences: [
-          'He is [driving] a blue car.',
-          'We [have] two pet dogs.'
-        ],
-        words: ['driving', 'have', 'run', 'like']
-      }
-    ];
-
-    db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json) VALUES (?, ?, ?, ?, ?)')
-      .run(
-        crypto.randomUUID(),
-        grammarCatId,
-        'Present Simple Basics',
-        'EXPLORER',
-        JSON.stringify(explorerQuestions)
-      );
-
-    // Voyager (Medium)
-    const voyagerQuestions = [
-      {
-        id: 'sort1',
-        type: 'category_sorting',
-        question: 'Sort the verbs into Present Simple or Present Continuous.',
-        categories: ['Present Simple', 'Present Continuous'],
-        items: [
-          { text: 'always walks', category: 'Present Simple' },
-          { text: 'is writing', category: 'Present Continuous' },
-          { text: 'usually cooks', category: 'Present Simple' },
-          { text: 'are playing', category: 'Present Continuous' }
-        ]
-      },
-      {
-        id: 'mistake1',
-        type: 'correct_the_mistake',
-        question: 'Find and correct the mistake in the sentence.',
-        text: 'She do not like milk.',
-        mistake: 'do',
-        correction: 'does'
-      }
-    ];
-
-    db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json) VALUES (?, ?, ?, ?, ?)')
-      .run(
-        crypto.randomUUID(),
-        grammarCatId,
-        'Simple vs. Continuous',
-        'VOYAGER',
-        JSON.stringify(voyagerQuestions)
-      );
-
-    // Challenger (Hard)
-    const challengerQuestions = [
-      {
-        id: 'matrix1',
-        type: 'choice_matrix',
-        question: 'Classify whether the verb is Stative or Dynamic.',
-        rows: ['believe', 'run', 'know', 'dance'],
-        columns: ['Stative Verb', 'Dynamic Verb'],
-        answers: {
-          'believe': 'Stative Verb',
-          'run': 'Dynamic Verb',
-          'know': 'Stative Verb',
-          'dance': 'Dynamic Verb'
-        }
-      },
-      {
-        id: 'cross1',
-        type: 'crossword',
-        question: 'Solve this mini-grammar crossword.',
-        grid: [
-          ['S', 'P', 'E', 'A', 'K'],
-          ['.', 'L', '.', '.', '.'],
-          ['.', 'A', 'M', '.', '.'],
-          ['.', 'Y', '.', '.', '.'],
-          ['.', '.', '.', '.', '.']
-        ],
-        clues: [
-          { number: 1, direction: 'across', text: 'Present tense of spoke.', row: 0, col: 0, length: 5 },
-          { number: 2, direction: 'down', text: 'To perform a game or instrument.', row: 0, col: 1, length: 4 },
-          { number: 3, direction: 'across', text: 'First-person singular of be.', row: 2, col: 2, length: 2 }
-        ]
-      }
-    ];
-
-    db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json) VALUES (?, ?, ?, ?, ?)')
-      .run(
-        crypto.randomUUID(),
-        grammarCatId,
-        'Stative Verbs & Advanced Tenses',
-        'CHALLENGER',
-        JSON.stringify(challengerQuestions)
-      );
-
-    // 6. Seed Book Club (Books & Chapters)
+    // 3. Seed Book Club (Books & Chapters)
     const bookId = crypto.randomUUID();
     db.prepare('INSERT INTO books (id, title, description) VALUES (?, ?, ?)')
       .run(
@@ -348,6 +229,488 @@ function runSeed() {
       );
 
     console.log('LingoPeak database seeding completed.');
+  })();
+}
+
+function seedMORE1Units() {
+  db.transaction(() => {
+    // ===================== 1. CREATE 15 UNITS =====================
+    const unitDefs = [
+      { title: 'Time for school', order: 1 },
+      { title: 'At the zoo', order: 2 },
+      { title: 'Pirates', order: 3 },
+      { title: 'Emotions', order: 4 },
+      { title: 'This is our band', order: 5 },
+      { title: "The world's best detective", order: 6 },
+      { title: 'I love noodles', order: 7 },
+      { title: 'Clothes', order: 8 },
+      { title: 'Shopping', order: 9 },
+      { title: 'In a shop', order: 10 },
+      { title: "What's the time?", order: 11 },
+      { title: 'The birthday cake', order: 12 },
+      { title: 'Help!', order: 13 },
+      { title: "It's my favourite", order: 14 },
+      { title: 'What are you going to do?', order: 15 },
+    ];
+
+    const unitIds: Record<string, string> = {};
+    for (const u of unitDefs) {
+      const id = crypto.randomUUID();
+      db.prepare('INSERT OR IGNORE INTO units (id, title, order_num) VALUES (?, ?, ?)').run(id, u.title, u.order);
+      unitIds[u.title] = id;
+    }
+
+    // ===================== 2. CREATE 5 CATEGORIES PER UNIT =====================
+    const categoryNames = ['GRAMMAR', 'VOCABULARY', 'READING', 'WRITING', 'LISTENING'];
+    const catIds: Record<string, string> = {};
+
+    for (const u of unitDefs) {
+      for (const cat of categoryNames) {
+        const id = crypto.randomUUID();
+        db.prepare('INSERT INTO categories (id, name, unit_id) VALUES (?, ?, ?)').run(id, cat, unitIds[u.title]);
+        catIds[`${u.title}:${cat}`] = id;
+      }
+    }
+
+    // ===================== 3. UNIT 1 WORKSHEETS =====================
+    const u1 = 'Time for school';
+    const gId = catIds[`${u1}:GRAMMAR`];
+    const vId = catIds[`${u1}:VOCABULARY`];
+    const rId = catIds[`${u1}:READING`];
+    const wId = catIds[`${u1}:WRITING`];
+    const lId = catIds[`${u1}:LISTENING`];
+
+    // ----- GRAMMAR: Explorer -----
+    db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json) VALUES (?, ?, ?, ?, ?)')
+      .run(crypto.randomUUID(), gId, 'Alphabet & Numbers', 'EXPLORER', JSON.stringify([
+        {
+          id: 'g_e1',
+          type: 'matching_pairs',
+          question: 'Match each capital letter to its lowercase partner.',
+          pairs: { 'A': 'a', 'B': 'b', 'C': 'c', 'D': 'd', 'E': 'e' },
+        },
+        {
+          id: 'g_e2',
+          type: 'fill_in_gap',
+          question: 'Write the plural forms.',
+          text: 'One cat, two [cats]. One book, three [books]. One box, four [boxes].',
+        },
+        {
+          id: 'g_e3',
+          type: 'multiple_choice',
+          question: 'What number comes after 12?',
+          options: ['10', '11', '13', '14'],
+          answer: '13',
+        },
+      ]));
+
+    // ----- GRAMMAR: Voyager -----
+    db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json) VALUES (?, ?, ?, ?, ?)')
+      .run(crypto.randomUUID(), gId, 'Plurals & Orders', 'VOYAGER', JSON.stringify([
+        {
+          id: 'g_v1',
+          type: 'category_sorting',
+          question: 'Sort these nouns into the correct plural category.',
+          categories: ['Regular Plural (-s)', 'Irregular Plural'],
+          items: [
+            { text: 'cats', category: 'Regular Plural (-s)' },
+            { text: 'mice', category: 'Irregular Plural' },
+            { text: 'dogs', category: 'Regular Plural (-s)' },
+            { text: 'children', category: 'Irregular Plural' },
+            { text: 'books', category: 'Regular Plural (-s)' },
+            { text: 'men', category: 'Irregular Plural' },
+          ],
+        },
+        {
+          id: 'g_v2',
+          type: 'correct_the_mistake',
+          question: 'Find and correct the mistake in this instruction.',
+          text: 'Open you book to page five.',
+          mistake: 'you',
+          correction: 'your',
+        },
+        {
+          id: 'g_v3',
+          type: 'fill_in_gap',
+          question: 'Complete the classroom instructions.',
+          text: '[Open] your book. [Close] the door. [Listen] to the teacher.',
+        },
+      ]));
+
+    // ----- GRAMMAR: Challenger -----
+    db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json) VALUES (?, ?, ?, ?, ?)')
+      .run(crypto.randomUUID(), gId, 'Grammar Climber', 'CHALLENGER', JSON.stringify([
+        {
+          id: 'g_c1',
+          type: 'choice_matrix',
+          question: 'Classify each word as Singular or Plural.',
+          rows: ['child', 'children', 'mouse', 'mice', 'book', 'books', 'man'],
+          columns: ['Singular', 'Plural'],
+          answers: {
+            'child': 'Singular', 'children': 'Plural',
+            'mouse': 'Singular', 'mice': 'Plural',
+            'book': 'Singular', 'books': 'Plural',
+            'man': 'Singular',
+          },
+        },
+        {
+          id: 'g_c2',
+          type: 'correct_the_mistake',
+          question: 'Find and correct the mistake.',
+          text: 'I has two brother and one sister.',
+          mistake: 'has',
+          correction: 'have',
+        },
+        {
+          id: 'g_c3',
+          type: 'multiple_choice',
+          question: 'Which word is an imperative (command)?',
+          options: ['sleeps', 'opened', 'close', 'playing'],
+          answer: 'close',
+        },
+      ]));
+
+    // ----- VOCABULARY: Explorer -----
+    db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json) VALUES (?, ?, ?, ?, ?)')
+      .run(crypto.randomUUID(), vId, 'Colourful World', 'EXPLORER', JSON.stringify([
+        {
+          id: 'v_e1',
+          type: 'multiple_choice',
+          question: 'What colour is the sky on a sunny day?',
+          options: ['red', 'blue', 'green', 'yellow'],
+          answer: 'blue',
+        },
+        {
+          id: 'v_e2',
+          type: 'matching_pairs',
+          question: 'Match each colour to its emoji.',
+          pairs: { 'red': '🔴', 'blue': '🔵', 'green': '🟢', 'yellow': '🟡', 'black': '⚫' },
+        },
+        {
+          id: 'v_e3',
+          type: 'fill_in_gap',
+          question: 'Complete the sentences with the correct colour.',
+          text: 'Grass is [green]. The sun is [yellow]. Snow is [white].',
+        },
+      ]));
+
+    // ----- VOCABULARY: Voyager -----
+    db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json) VALUES (?, ?, ?, ?, ?)')
+      .run(crypto.randomUUID(), vId, 'My School Bag', 'VOYAGER', JSON.stringify([
+        {
+          id: 'v_v1',
+          type: 'multiple_choice',
+          question: 'I write with a _____.',
+          options: ['ruler', 'pen', 'bag', 'sharpener'],
+          answer: 'pen',
+        },
+        {
+          id: 'v_v2',
+          type: 'category_sorting',
+          question: 'Sort each item into the correct group.',
+          categories: ['School Things', 'Classroom Objects'],
+          items: [
+            { text: 'pencil', category: 'School Things' },
+            { text: 'board', category: 'Classroom Objects' },
+            { text: 'rubber', category: 'School Things' },
+            { text: 'desk', category: 'Classroom Objects' },
+            { text: 'book', category: 'School Things' },
+            { text: 'clock', category: 'Classroom Objects' },
+          ],
+        },
+        {
+          id: 'v_v3',
+          type: 'matching_pairs',
+          question: 'Match each school thing to its use.',
+          pairs: { 'pen': 'writing', 'ruler': 'measuring', 'rubber': 'erasing', 'sharpener': 'sharpening' },
+        },
+      ]));
+
+    // ----- VOCABULARY: Challenger -----
+    db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json) VALUES (?, ?, ?, ?, ?)')
+      .run(crypto.randomUUID(), vId, 'In the Classroom', 'CHALLENGER', JSON.stringify([
+        {
+          id: 'v_c1',
+          type: 'correct_the_mistake',
+          question: 'Find and correct the mistake.',
+          text: 'I can see a boards on the wall.',
+          mistake: 'boards',
+          correction: 'board',
+        },
+        {
+          id: 'v_c2',
+          type: 'fill_in_gap',
+          question: 'Describe your classroom.',
+          text: 'In my classroom there is a [board]. There are twenty [desks]. The [clock] is on the wall.',
+        },
+        {
+          id: 'v_c3',
+          type: 'multiple_choice',
+          question: 'Which of these is NOT a classroom object?',
+          options: ['board', 'chair', 'pencil', 'tiger'],
+          answer: 'tiger',
+        },
+      ]));
+
+    // ----- READING: Explorer -----
+    db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json) VALUES (?, ?, ?, ?, ?)')
+      .run(crypto.randomUUID(), rId, 'My Pet Dog', 'EXPLORER', JSON.stringify([
+        {
+          id: 'r_e1',
+          type: 'multiple_choice',
+          question: 'Read: "Tim has a pet dog. The dog is brown. Its name is Max. Tim and Max play in the park every day."\n\nWhat is the dog\'s name?',
+          options: ['Tim', 'Max', 'Brown', 'Park'],
+          answer: 'Max',
+        },
+        {
+          id: 'r_e2',
+          type: 'multiple_choice',
+          question: 'What colour is Max?',
+          options: ['black', 'white', 'brown', 'grey'],
+          answer: 'brown',
+        },
+        {
+          id: 'r_e3',
+          type: 'fill_in_gap',
+          question: 'Complete the sentence from the story.',
+          text: 'Tim and Max play in the [park] every day.',
+        },
+      ]));
+
+    // ----- READING: Voyager -----
+    db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json) VALUES (?, ?, ?, ?, ?)')
+      .run(crypto.randomUUID(), rId, 'The Wide-Mouthed Frog', 'VOYAGER', JSON.stringify([
+        {
+          id: 'r_v1',
+          type: 'sentence_unscramble',
+          question: 'Unscramble the sentence from the story.',
+          words: ['A', 'wide-mouthed', 'frog', 'lived', 'in', 'a', 'pond.'],
+        },
+        {
+          id: 'r_v2',
+          type: 'multiple_choice',
+          question: 'What did the wide-mouthed frog like to eat?',
+          options: ['fish', 'flies', 'plants', 'worms'],
+          answer: 'flies',
+        },
+        {
+          id: 'r_v3',
+          type: 'fill_in_gap',
+          question: 'Complete the sentence.',
+          text: 'The frog opened his mouth very [wide] and jumped [away].',
+        },
+      ]));
+
+    // ----- READING: Challenger -----
+    db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json) VALUES (?, ?, ?, ?, ?)')
+      .run(crypto.randomUUID(), rId, 'Midnight in the Classroom', 'CHALLENGER', JSON.stringify([
+        {
+          id: 'r_c1',
+          type: 'correct_the_mistake',
+          question: 'Read the summary and correct the mistake. (The story happens at midnight.)',
+          text: 'The story happens in the morning.',
+          mistake: 'morning',
+          correction: 'midnight',
+        },
+        {
+          id: 'r_c2',
+          type: 'drag_and_drop',
+          question: 'Drag the correct words to complete the story summary.',
+          sentences: [
+            '[First], the children went to school.',
+            'Then, [everyone] sat down quietly.',
+            'Finally, the [teacher] turned off the lights.',
+          ],
+          words: ['First', 'everyone', 'teacher', 'yesterday', 'mother'],
+        },
+        {
+          id: 'r_c3',
+          type: 'category_sorting',
+          question: 'True or False? Read the statements about "Midnight in the Classroom".',
+          categories: ['True', 'False'],
+          items: [
+            { text: 'The story is about a classroom.', category: 'True' },
+            { text: 'The story happens at noon.', category: 'False' },
+            { text: 'There are children in the story.', category: 'True' },
+            { text: 'The teacher is angry.', category: 'False' },
+          ],
+        },
+      ]));
+
+    // ----- WRITING: Explorer -----
+    db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json) VALUES (?, ?, ?, ?, ?)')
+      .run(crypto.randomUUID(), wId, 'Building Sentences', 'EXPLORER', JSON.stringify([
+        {
+          id: 'w_e1',
+          type: 'sentence_unscramble',
+          question: 'Unscramble the words to make a sentence.',
+          words: ['My', 'name', 'is', 'Anna.'],
+        },
+        {
+          id: 'w_e2',
+          type: 'sentence_unscramble',
+          question: 'Unscramble the words to make a sentence.',
+          words: ['I', 'am', 'ten', 'years', 'old.'],
+        },
+        {
+          id: 'w_e3',
+          type: 'fill_in_gap',
+          question: 'Write about yourself.',
+          text: 'My favourite colour is [blue]. I like [cats]. My best friend is [Tom].',
+        },
+      ]));
+
+    // ----- WRITING: Voyager -----
+    db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json) VALUES (?, ?, ?, ?, ?)')
+      .run(crypto.randomUUID(), wId, 'Fix & Improve', 'VOYAGER', JSON.stringify([
+        {
+          id: 'w_v1',
+          type: 'correct_the_mistake',
+          question: 'Find and correct the mistake. Remember: sentences start with a capital letter!',
+          text: 'my name is max.',
+          mistake: 'my',
+          correction: 'My',
+        },
+        {
+          id: 'w_v2',
+          type: 'drag_and_drop',
+          question: 'Drag the correct words to complete the sentences.',
+          sentences: [
+            'I am [ten] years old.',
+            'My favourite [colour] is blue.',
+            'I [like] to read books.',
+          ],
+          words: ['ten', 'colour', 'like', 'old', 'cat'],
+        },
+        {
+          id: 'w_v3',
+          type: 'fill_in_gap',
+          question: 'Complete the sentences about you.',
+          text: 'I am [happy] today. My school bag is [blue].',
+        },
+      ]));
+
+    // ----- WRITING: Challenger -----
+    db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json) VALUES (?, ?, ?, ?, ?)')
+      .run(crypto.randomUUID(), wId, 'Write About You', 'CHALLENGER', JSON.stringify([
+        {
+          id: 'w_c1',
+          type: 'category_sorting',
+          question: 'Sort these sentences into Introduction and Body.',
+          categories: ['Introduction', 'Body'],
+          items: [
+            { text: 'My name is Sarah.', category: 'Introduction' },
+            { text: 'I have a pet dog.', category: 'Body' },
+            { text: 'Hi, I am Tom.', category: 'Introduction' },
+            { text: 'My favourite sport is football.', category: 'Body' },
+          ],
+        },
+        {
+          id: 'w_c2',
+          type: 'correct_the_mistake',
+          question: 'Find and correct both mistakes in this paragraph.',
+          text: 'i have two brother and one sister.',
+          mistake: 'i',
+          correction: 'I',
+        },
+        {
+          id: 'w_c3',
+          type: 'fill_in_gap',
+          question: 'Complete the paragraph about yourself.',
+          text: 'My name [is] Tom. I am [ten] years old. I [like] football.',
+        },
+      ]));
+
+    // ----- LISTENING: Explorer (dialogue: spelling names) -----
+    db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json, transcript, is_dialogue) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(crypto.randomUUID(), lId, 'Spell It Out', 'EXPLORER', JSON.stringify([
+        {
+          id: 'l_e1',
+          type: 'multiple_choice',
+          question: 'Listen to the dialogue. What is the boy\'s name?',
+          options: ['Sam', 'Tom', 'Max', 'Ben'],
+          answer: 'Sam',
+        },
+        {
+          id: 'l_e2',
+          type: 'multiple_choice',
+          question: 'How does he spell his name?',
+          options: ['S-A-N', 'S-A-M', 'S-E-M', 'S-A-T'],
+          answer: 'S-A-M',
+        },
+        {
+          id: 'l_e3',
+          type: 'multiple_choice',
+          question: 'What is the dialogue about?',
+          options: ['The weather', 'Spelling a name', 'School subjects', 'Animals'],
+          answer: 'Spelling a name',
+        },
+      ]),
+        'A: Hello, what is your name?\nB: My name is Sam.\nA: How do you spell Sam?\nB: S-A-M.\nA: Thank you, Sam!',
+        1);
+
+    // ----- LISTENING: Voyager (dialogue: classroom instructions) -----
+    db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json, transcript, is_dialogue) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(crypto.randomUUID(), lId, 'Follow the Teacher', 'VOYAGER', JSON.stringify([
+        {
+          id: 'l_v1',
+          type: 'fill_in_gap',
+          question: 'Complete what the teacher says.',
+          text: 'Please [open] your books to page [12].',
+        },
+        {
+          id: 'l_v2',
+          type: 'multiple_choice',
+          question: 'What page does the teacher say?',
+          options: ['10', '12', '20', '15'],
+          answer: '12',
+        },
+        {
+          id: 'l_v3',
+          type: 'multiple_choice',
+          question: 'What does the teacher ask the students to do?',
+          options: ['Run outside', 'Listen and repeat', 'Close their books', 'Draw a picture'],
+          answer: 'Listen and repeat',
+        },
+      ]),
+        'Teacher: Good morning, class!\nStudents: Good morning, Miss Lee!\nTeacher: Please open your books to page 12.\nStudents: OK, Miss Lee.\nTeacher: Now, please listen and repeat after me.',
+        1);
+
+    // ----- LISTENING: Challenger (dialogue: school uniform discussion) -----
+    db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json, transcript, is_dialogue) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(crypto.randomUUID(), lId, 'School Uniform Talk', 'CHALLENGER', JSON.stringify([
+        {
+          id: 'l_c1',
+          type: 'correct_the_mistake',
+          question: 'Listen and correct the sentence.',
+          text: 'The students talk about their favourite subjects.',
+          mistake: 'subjects',
+          correction: 'uniform',
+        },
+        {
+          id: 'l_c2',
+          type: 'multiple_choice',
+          question: 'What do both students agree on?',
+          options: ['They love the colour', 'The uniform is comfortable', 'They want more uniform', 'The uniform is expensive'],
+          answer: 'The uniform is comfortable',
+        },
+        {
+          id: 'l_c3',
+          type: 'category_sorting',
+          question: 'Who said what? Listen and sort each line.',
+          categories: ['Student A', 'Student B'],
+          items: [
+            { text: 'I don\'t like the colour.', category: 'Student A' },
+            { text: 'I prefer wearing my own clothes.', category: 'Student B' },
+            { text: 'The uniform is comfortable.', category: 'Student A' },
+            { text: 'It\'s easy in the morning.', category: 'Student B' },
+          ],
+        },
+      ]),
+        'A: Hey, do you like our school uniform?\nB: Hmm, not really. I don\'t like the colour.\nA: Me neither. I prefer wearing my own clothes.\nB: Same here! At least the uniform is comfortable.\nA: True. And it\'s easy in the morning – no need to choose what to wear!',
+        1);
+
+    console.log('MORE! 1 textbook units and Unit 1 worksheets seeded successfully.');
   })();
 }
 
