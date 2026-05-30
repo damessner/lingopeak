@@ -3,7 +3,7 @@
 # LingoPeak - Proxmox Host LXC Creator
 # This script runs on the Proxmox VE host shell.
 # It creates a Debian 12 container and launches the LingoPeak installer inside it.
-# Usage: curl -fsSL https://raw.githubusercontent.com/damessner/lingopeak/main/deployment/create-lxc.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/damessner/lingopeak/master/deployment/create-lxc.sh | bash
 
 set -e
 
