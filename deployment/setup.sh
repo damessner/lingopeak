@@ -2,7 +2,7 @@
 
 # LingoPeak - Container Setup Script
 # Runs inside the LXC container to install application dependencies.
-# Usage: curl -fsSL https://raw.githubusercontent.com/damessner/lingopeak/main/deployment/setup.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/damessner/lingopeak/master/deployment/setup.sh | bash
 
 set -e
 
@@ -46,7 +46,7 @@ else
   echo "$INFO Target directory $TARGET_DIR already exists, pulling updates..."
   cd "$TARGET_DIR"
   git fetch --all
-  git reset --hard origin/main
+  git reset --hard origin/master
 fi
 
 cd "$TARGET_DIR"

@@ -21,7 +21,7 @@ git stash || true
 # 2. Pull main branch
 echo "$INFO Pulling latest production release from GitHub..."
 git fetch --all
-git pull origin main
+git pull origin master
 
 # 3. Align packages
 echo "$INFO Verifying dependency updates..."

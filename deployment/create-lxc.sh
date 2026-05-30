@@ -83,7 +83,7 @@ sleep 5
 
 # 6. Execute installer script inside the container
 echo -e "${YELLOW}[INFO] Launching LingoPeak application configuration inside container...${NC}"
-pct exec $CTID -- bash -c "curl -fsSL https://raw.githubusercontent.com/damessner/lingopeak/main/deployment/setup.sh | bash"
+pct exec $CTID -- bash -c "curl -fsSL https://raw.githubusercontent.com/damessner/lingopeak/master/deployment/setup.sh | bash"
 
 # Get IP address of container
 CT_IP=$(pct exec $CTID -- hostname -I | awk '{print $1}')
