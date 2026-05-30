@@ -25,14 +25,16 @@ export default async function StudentDashboard() {
     if (classRecord) className = classRecord.name;
   }
 
-  // Fetch all units from SQLite
+  // Fetch unit count for dashboard stats
   const units = db.prepare('SELECT * FROM units ORDER BY order_num ASC').all() as any[];
-
-  // Fetch categories for each unit
-  const unitsWithCategories = units.map((unit) => {
-    const categories = db.prepare('SELECT id, name FROM categories WHERE unit_id = ?').all(unit.id) as any[];
-    return { ...unit, categories };
-  });
+  const totalUnits = units.length;
+  const totalWorksheets = db.prepare(`
+    SELECT COUNT(DISTINCT w.id) as count
+    FROM worksheets w
+    JOIN categories c ON w.category_id = c.id
+    WHERE w.tier != 'SUMMIT'
+  `).get() as any;
+  const wsCount = totalWorksheets?.count || 0;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans relative overflow-hidden flex flex-col">
@@ -104,6 +106,30 @@ export default async function StudentDashboard() {
           </p>
         </section>
 
+        {/* Curriculum — Primary Action */}
+        <section className="mb-8 animate-fadeIn">
+          <a
+            href="/student/units"
+            className="group block bg-gradient-to-r from-indigo-900/60 via-indigo-950/40 to-slate-950 border border-indigo-500/20 hover:border-indigo-500/40 rounded-3xl p-8 transition-all duration-300 shadow-xl relative overflow-hidden"
+          >
+            <div className="absolute right-8 bottom-[-10px] text-8xl text-indigo-500/5 font-extrabold select-none pointer-events-none group-hover:text-indigo-500/10 transition-all">📚</div>
+            <div className="flex items-center gap-5">
+              <span className="text-5xl select-none bg-indigo-500/10 p-4 rounded-2xl border border-indigo-500/10 shadow-md group-hover:scale-110 transition-transform">📚</span>
+              <div className="flex-1">
+                <h2 className="text-2xl font-extrabold text-white tracking-tight group-hover:text-indigo-200 transition-colors">
+                  Learning Path
+                </h2>
+                <p className="text-slate-400 text-sm mt-1 max-w-xl">
+                  {totalUnits} units · {wsCount} interactive worksheets across grammar, vocabulary, reading, writing, and listening.
+                </p>
+              </div>
+              <span className="hidden md:inline-block bg-indigo-600 group-hover:bg-indigo-500 text-white font-bold text-sm py-3 px-6 rounded-xl border border-indigo-400/20 transition-all shadow-md">
+                Explore Curriculum ➔
+              </span>
+            </div>
+          </a>
+        </section>
+
         {/* Special Learning Arenas */}
         <section className="mb-10 grid grid-cols-1 md:grid-cols-2 gap-6 animate-fadeIn">
           <div className="group bg-slate-900/40 border border-slate-800 rounded-3xl p-6 hover:border-indigo-500/30 hover:bg-slate-900/60 transition-all duration-300 shadow-lg flex gap-5">
@@ -142,55 +168,6 @@ export default async function StudentDashboard() {
             </div>
           </div>
         </section>
-
-        {/* Learning Units Section */}
-        <div className="space-y-12">
-          {unitsWithCategories.map((unit, index) => (
-            <section key={unit.id} className="space-y-6">
-              <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
-                <span className="text-xs bg-indigo-600 text-white font-black px-2.5 py-1 rounded-lg">
-                  UNIT {unit.order_num}
-                </span>
-                <h3 className="text-xl font-bold text-white tracking-wide">{unit.title}</h3>
-              </div>
-
-              {/* Course categories inside unit */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {unit.categories.map((cat: any) => (
-                  <div
-                    key={cat.id}
-                    className="group bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 hover:border-indigo-500/30 hover:bg-slate-900/60 transition-all duration-300 shadow-md relative overflow-hidden"
-                  >
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-indigo-500/10 to-transparent blur-md rounded-full pointer-events-none transition-all group-hover:scale-125" />
-                    
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/10">
-                        {cat.name}
-                      </span>
-                      <span className="text-lg">🎒</span>
-                    </div>
-
-                    <h4 className="text-base font-bold text-white mb-2">Practice {cat.name.toLowerCase()}</h4>
-                    <p className="text-slate-400 text-xs leading-relaxed mb-6">
-                      Explore vocabulary and practice grammar concepts with interactive exercises.
-                    </p>
-
-                    {/* Progress Road Link */}
-                    <div className="flex items-center justify-between pt-4 border-t border-slate-800/80">
-                      <span className="text-[10px] text-slate-500 font-bold uppercase">0 / 4 Completed</span>
-                      <a
-                        href={`/student/units/${unit.id}/${cat.name.toLowerCase()}`}
-                        className="bg-indigo-600 group-hover:bg-indigo-500 text-white font-bold text-xs py-1.5 px-4 rounded-lg transition-colors flex items-center gap-1 shadow-md cursor-pointer"
-                      >
-                        Let's Go ➔
-                      </a>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
 
       </main>
 
