@@ -278,8 +278,25 @@ msg_info "Waiting 5 seconds for network allocation inside container..."
 sleep 5
 
 # 6. Execute installer script inside the container
-msg_info "Launching LingoPeak setup script inside container..."
-pct exec $CTID -- bash -c "curl -fsSL https://raw.githubusercontent.com/damessner/lingopeak/master/deployment/setup.sh | bash"
+msg_info "Downloading setup script on host..."
+TEMP_SETUP=$(mktemp /tmp/lingopeak-setup.XXXXXX)
+curl -fsSL https://raw.githubusercontent.com/damessner/lingopeak/master/deployment/setup.sh -o "$TEMP_SETUP"
+
+msg_info "Pushing setup script to container..."
+pct push $CTID "$TEMP_SETUP" /tmp/setup.sh
+rm -f "$TEMP_SETUP"
+
+msg_info "Executing setup script inside container (this may take a few minutes)..."
+pct exec $CTID -- bash /tmp/setup.sh
+
+# Verify setup succeeded via marker file
+if pct exec $CTID -- test -f /tmp/setup.done; then
+  msg_ok "LingoPeak setup completed successfully inside the container."
+  pct exec $CTID -- rm -f /tmp/setup.done /tmp/setup.sh
+else
+  msg_error "LingoPeak setup script failed or did not run to completion!"
+  exit 1
+fi
 
 # Get IP address of container
 CT_IP=$(pct exec $CTID -- hostname -I | awk '{print $1}')

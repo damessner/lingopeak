@@ -88,3 +88,6 @@ echo "============================================="
 echo "$SUCCESS LingoPeak environment set up successfully!"
 echo "App is running at: http://$(hostname -I | awk '{print $1}'):3000"
 echo "============================================="
+
+# Write success marker for host script validation
+echo "done" > /tmp/setup.done
