@@ -233,6 +233,13 @@ export default function TeacherDashboardClient({
               </div>
             </div>
 
+            <Link
+              href="/student/dashboard"
+              className="bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 hover:text-white border border-indigo-500/20 transition-all rounded-xl py-2 px-4 text-xs font-bold flex items-center gap-1.5"
+            >
+              👁️ Student View
+            </Link>
+
             <button
               onClick={() => handleLogoutAction()}
               className="bg-slate-900/60 hover:bg-red-950/30 hover:border-red-500/30 text-slate-400 hover:text-red-200 border border-slate-800 hover:shadow-lg transition-all rounded-xl py-2 px-4 text-xs font-bold cursor-pointer"

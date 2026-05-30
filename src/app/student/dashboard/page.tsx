@@ -72,6 +72,24 @@ export default async function StudentDashboard() {
         </div>
       </header>
 
+      {/* Preview Banner for Teachers/Admins */}
+      {(session.role === 'TEACHER' || session.role === 'ADMIN') && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20">
+          <div className="max-w-5xl mx-auto px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs text-amber-300 font-semibold">
+              <span>👁️</span>
+              <span>Preview Mode — You are viewing the student interface.</span>
+            </div>
+            <a
+              href="/teacher/dashboard"
+              className="text-[10px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold px-3 py-1 rounded-lg border border-amber-500/20 transition-colors"
+            >
+              ← Back to Staff Portal
+            </a>
+          </div>
+        </div>
+      )}
+
       {/* Main Learning Space */}
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-10 z-10">
         
