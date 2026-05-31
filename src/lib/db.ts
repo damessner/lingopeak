@@ -72,6 +72,24 @@ function initDb() {
     }
 
     try {
+      db.prepare('SELECT id FROM notifications LIMIT 1').get();
+    } catch (e) {
+      console.log('Migrating: Creating notifications table...');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS notifications (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          title TEXT NOT NULL,
+          message TEXT NOT NULL,
+          read INTEGER DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+      `);
+    }
+
+    try {
       db.prepare('SELECT badge_emoji FROM worksheets LIMIT 1').get();
     } catch (e) {
       console.log('Migrating: Adding badge_emoji column to worksheets table...');

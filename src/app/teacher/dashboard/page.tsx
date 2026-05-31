@@ -47,6 +47,15 @@ export default async function TeacherDashboard() {
     ORDER BY username ASC
   `).all() as any[];
 
+  // 4.5 Fetch all active Staff members for class assignments
+  const staff = db.prepare(`
+    SELECT u.id, u.username, u.avatar_emoji, u.class_id, c.name as class_name, u.role
+    FROM users u
+    LEFT JOIN classes c ON u.class_id = c.id
+    WHERE u.role = 'TEACHER' OR u.role = 'ADMIN'
+    ORDER BY u.username ASC
+  `).all() as any[];
+
   // 5. Pre-compile Heatmap highest score metrics
   const heatmapRows = db.prepare(`
     SELECT a.student_id, w.category_id, MAX(a.score) as max_score
@@ -65,6 +74,7 @@ export default async function TeacherDashboard() {
     <TeacherDashboardClient
       initialStudents={students}
       initialPendings={pendings}
+      initialStaff={staff}
       classes={classes}
       categories={categories}
       heatmapScores={heatmapScores}

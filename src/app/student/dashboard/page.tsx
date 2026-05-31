@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { verifySession } from '@/lib/session';
 import db from '@/lib/db';
 import Link from 'next/link';
+import NotificationBell from '@/components/NotificationBell';
 
 async function handleLogout() {
   'use server';
@@ -62,6 +63,8 @@ export default async function StudentDashboard() {
                 <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Class {className}</div>
               </div>
             </Link>
+
+            <NotificationBell />
 
             <form action={handleLogout}>
               <button

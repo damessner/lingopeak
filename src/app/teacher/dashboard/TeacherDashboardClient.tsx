@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import WorksheetsTab from '@/components/teacher/builder/WorksheetsTab';
+import NotificationBell from '@/components/NotificationBell';
 
 interface Student {
   id: string;
@@ -17,6 +18,15 @@ interface PendingStaff {
   id: string;
   username: string;
   avatar_emoji: string;
+}
+
+interface StaffMember {
+  id: string;
+  username: string;
+  avatar_emoji: string;
+  class_id: string | null;
+  class_name: string | null;
+  role: string;
 }
 
 interface SchoolClass {
@@ -34,6 +44,7 @@ interface Category {
 interface TeacherDashboardClientProps {
   initialStudents: Student[];
   initialPendings: PendingStaff[];
+  initialStaff: StaffMember[];
   classes: SchoolClass[];
   categories: Category[];
   heatmapScores: Record<string, number>; // key is `${studentId}_${categoryId}`
@@ -46,6 +57,7 @@ interface TeacherDashboardClientProps {
 export default function TeacherDashboardClient({
   initialStudents,
   initialPendings,
+  initialStaff,
   classes,
   categories,
   heatmapScores,
@@ -57,7 +69,7 @@ export default function TeacherDashboardClient({
   const router = useRouter();
 
   // Navigation state
-  const [activeTab, setActiveTab] = useState<'pupils' | 'heatmap' | 'struggles' | 'ai-revision' | 'worksheets' | 'pending' | 'admin'>('heatmap');
+  const [activeTab, setActiveTab] = useState<'pupils' | 'heatmap' | 'struggles' | 'ai-revision' | 'worksheets' | 'pending' | 'admin' | 'classes'>('heatmap');
 
   // Class selection state (default to first class if available)
   const [selectedClassId, setSelectedClassId] = useState<string>(classes[0]?.id || '');
@@ -70,6 +82,13 @@ export default function TeacherDashboardClient({
   // Pending staff list state
   const [pendings, setPendings] = useState<PendingStaff[]>(initialPendings);
   const [students, setStudents] = useState<Student[]>(initialStudents);
+
+  // Local state variables for dynamic client-side list updates
+  const [classesList, setClassesList] = useState<SchoolClass[]>(classes);
+  const [staffList, setStaffList] = useState<StaffMember[]>(initialStaff);
+  const [newClassName, setNewClassName] = useState('');
+  const [editingClassId, setEditingClassId] = useState<string | null>(null);
+  const [editingClassName, setEditingClassName] = useState('');
 
   // AI revision generator state
   const [revisionLoading, setRevisionLoading] = useState(false);
@@ -145,6 +164,185 @@ export default function TeacherDashboardClient({
       // Remove from UI list
       setPendings(prev => prev.filter(p => p.id !== userId));
       displayMessage(`Approved staff account for ${username}.`, 'success');
+    } catch (err: any) {
+      displayMessage(err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 2.5 Classes CRUD and Roster Assignment handlers
+  const handleAssignStudentClass = async (studentId: string, classId: string | null) => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/teacher/roster', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: studentId, classId })
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to reassign student');
+      }
+
+      const assignedClass = classesList.find(c => c.id === classId);
+      const className = assignedClass ? assignedClass.name : null;
+
+      // Update students state
+      setStudents(prev =>
+        prev.map(s =>
+          s.id === studentId ? { ...s, class_id: classId, class_name: className } : s
+        )
+      );
+
+      displayMessage(`Reassigned student to Class ${className || 'Unassigned'}.`, 'success');
+    } catch (err: any) {
+      displayMessage(err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAssignStaffClass = async (staffId: string, classId: string | null) => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/teacher/roster', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: staffId, classId })
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to reassign staff');
+      }
+
+      const assignedClass = classesList.find(c => c.id === classId);
+      const className = assignedClass ? assignedClass.name : null;
+
+      // Update staff state
+      setStaffList(prev =>
+        prev.map(s =>
+          s.id === staffId ? { ...s, class_id: classId, class_name: className } : s
+        )
+      );
+
+      displayMessage(`Reassigned teacher to Class ${className || 'Unassigned'}.`, 'success');
+    } catch (err: any) {
+      displayMessage(err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = newClassName.trim();
+    if (!name) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch('/api/teacher/classes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to create class');
+      }
+
+      const data = await res.json();
+      setClassesList(prev => [...prev, data.class].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewClassName('');
+      displayMessage(`Class "${name}" created successfully.`, 'success');
+    } catch (err: any) {
+      displayMessage(err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRenameClass = async (id: string) => {
+    const name = editingClassName.trim();
+    if (!name) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch('/api/teacher/classes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, name })
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to rename class');
+      }
+
+      // Update classes state
+      setClassesList(prev =>
+        prev.map(c => (c.id === id ? { ...c, name } : c)).sort((a, b) => a.name.localeCompare(b.name))
+      );
+
+      // Update students state with the new class name
+      setStudents(prev =>
+        prev.map(s => (s.class_id === id ? { ...s, class_name: name } : s))
+      );
+
+      // Update staff state with the new class name
+      setStaffList(prev =>
+        prev.map(s => (s.class_id === id ? { ...s, class_name: name } : s))
+      );
+
+      setEditingClassId(null);
+      setEditingClassName('');
+      displayMessage(`Class renamed to "${name}" successfully.`, 'success');
+    } catch (err: any) {
+      displayMessage(err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteClass = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete Class "${name}"? All assigned students and teachers will become Unassigned.`)) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch('/api/teacher/classes', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to delete class');
+      }
+
+      // Remove class from classes state
+      setClassesList(prev => prev.filter(c => c.id !== id));
+
+      // Update students state to set class_id/class_name to null
+      setStudents(prev =>
+        prev.map(s => (s.class_id === id ? { ...s, class_id: null, class_name: null } : s))
+      );
+
+      // Update staff state to set class_id/class_name to null
+      setStaffList(prev =>
+        prev.map(s => (s.class_id === id ? { ...s, class_id: null, class_name: null } : s))
+      );
+
+      // Fallback selection of class id if active one is deleted
+      if (selectedClassId === id) setSelectedClassId(classesList.find(c => c.id !== id)?.id || '');
+      if (selectedRevisionClassId === id) setSelectedRevisionClassId(classesList.find(c => c.id !== id)?.id || '');
+
+      displayMessage(`Class "${name}" deleted.`, 'success');
     } catch (err: any) {
       displayMessage(err.message, 'error');
     } finally {
@@ -245,6 +443,8 @@ export default function TeacherDashboardClient({
               </div>
             </div>
 
+            <NotificationBell />
+
             <Link
               href="/student/dashboard"
               className="bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 hover:text-white border border-indigo-500/20 transition-all rounded-xl py-2 px-4 text-xs font-bold flex items-center gap-1.5"
@@ -333,6 +533,16 @@ export default function TeacherDashboardClient({
           >
             👥 Registered Pupils ({students.length})
           </button>
+          <button
+            onClick={() => setActiveTab('classes')}
+            className={`text-xs font-bold py-2.5 px-5 rounded-xl border transition-all cursor-pointer ${
+              activeTab === 'classes'
+                ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg shadow-indigo-500/10'
+                : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            🏫 Classes & Roster
+          </button>
           {sessionRole === 'ADMIN' && (
             <button
               onClick={() => setActiveTab('admin')}
@@ -371,7 +581,7 @@ export default function TeacherDashboardClient({
                   onChange={(e) => setSelectedClassId(e.target.value)}
                   className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-slate-300 font-bold outline-none cursor-pointer"
                 >
-                  {classes.map(cl => (
+                  {classesList.map(cl => (
                     <option key={cl.id} value={cl.id}>Class {cl.name}</option>
                   ))}
                 </select>
@@ -557,7 +767,7 @@ export default function TeacherDashboardClient({
                   onChange={(e) => setSelectedRevisionClassId(e.target.value)}
                   className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-slate-300 font-bold outline-none cursor-pointer"
                 >
-                  {classes.map(cl => (
+                  {classesList.map(cl => (
                     <option key={cl.id} value={cl.id}>Class {cl.name}</option>
                   ))}
                 </select>
@@ -600,7 +810,7 @@ export default function TeacherDashboardClient({
 
             {!revisionLoading && !revisionReport && (
               <div className="bg-slate-950/20 border border-slate-850 border-dashed rounded-2xl p-8 text-center text-slate-500 text-xs">
-                💡 Click "Generate Plan" above to analyze mistakes for Class {classes.find(c => c.id === selectedRevisionClassId)?.name || ''} and render a lesson draft.
+                💡 Click "Generate Plan" above to analyze mistakes for Class {classesList.find(c => c.id === selectedRevisionClassId)?.name || ''} and render a lesson draft.
               </div>
             )}
 
@@ -632,7 +842,7 @@ export default function TeacherDashboardClient({
                   className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-slate-300 font-bold outline-none cursor-pointer"
                 >
                   <option value="ALL">All Classes</option>
-                  {classes.map(cl => (
+                  {classesList.map(cl => (
                     <option key={cl.id} value={cl.id}>Class {cl.name}</option>
                   ))}
                 </select>
@@ -646,17 +856,29 @@ export default function TeacherDashboardClient({
                 {filteredStudents.map((st) => (
                   <div
                     key={st.id}
-                    className="bg-slate-950/40 border border-slate-800 rounded-2xl p-4 flex items-center justify-between hover:border-slate-700 transition-colors"
+                    className="bg-slate-950/40 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-slate-700 transition-colors"
                   >
                     <div className="flex items-center gap-3">
                       <span className="text-2xl filter drop-shadow-sm select-none">{st.avatar_emoji}</span>
-                      <div>
+                      <div className="space-y-1">
                         <div className="text-sm font-bold text-white max-w-[130px] truncate">{st.username}</div>
-                        <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Class {st.class_name || 'Unassigned'}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider">Class:</span>
+                          <select
+                            value={st.class_id || ''}
+                            onChange={(e) => handleAssignStudentClass(st.id, e.target.value || null)}
+                            className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-0.5 text-[10px] text-indigo-300 font-bold outline-none cursor-pointer focus:border-indigo-500"
+                          >
+                            <option value="">Unassigned</option>
+                            {classesList.map(cl => (
+                              <option key={cl.id} value={cl.id}>{cl.name}</option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 self-end sm:self-center">
                       <Link
                         href={`/teacher/reports/${st.id}`}
                         className="bg-slate-900 hover:bg-slate-850 border border-slate-800 text-[10px] font-bold py-1.5 px-3 rounded-lg text-indigo-400"
@@ -779,6 +1001,152 @@ export default function TeacherDashboardClient({
             </section>
 
           </div>
+        )}
+
+        {/* 7. CLASSES & ROSTER MANAGEMENT TAB */}
+        {activeTab === 'classes' && (
+          <section className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-6 animate-scaleUp">
+            <div className="border-b border-slate-800/80 pb-4">
+              <h2 className="text-xl font-extrabold text-white tracking-wide uppercase">Class & Staff Administration</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Manage classes, assign teachers, and allocate student rosters.</p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Left Column: Manage Classes (CRUD) */}
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-sm font-black text-indigo-400 uppercase tracking-widest mb-1">School Classes</h3>
+                  <p className="text-[11px] text-slate-500">Create new classrooms, rename them, or delete them.</p>
+                </div>
+
+                <form onSubmit={handleCreateClass} className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="New class name (e.g. 5A, Beginner)..."
+                    value={newClassName}
+                    onChange={(e) => setNewClassName(e.target.value)}
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-slate-300 outline-none focus:border-indigo-500"
+                  />
+                  <button
+                    type="submit"
+                    className="bg-indigo-650 hover:bg-indigo-600 text-white font-bold text-xs py-2 px-4 rounded-xl border border-indigo-500/20 transition-all shadow-md cursor-pointer"
+                  >
+                    + Add Class
+                  </button>
+                </form>
+
+                <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                  {classesList.length === 0 ? (
+                    <p className="text-slate-500 text-xs italic py-4">No classes created yet.</p>
+                  ) : (
+                    classesList.map((cl) => (
+                      <div
+                        key={cl.id}
+                        className="bg-slate-950/40 border border-slate-800 rounded-2xl p-4 flex items-center justify-between"
+                      >
+                        {editingClassId === cl.id ? (
+                          <div className="flex items-center gap-2 flex-1">
+                            <input
+                              type="text"
+                              value={editingClassName}
+                              onChange={(e) => setEditingClassName(e.target.value)}
+                              className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 outline-none focus:border-indigo-500"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => handleRenameClass(cl.id)}
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] py-1 px-3 rounded-lg border border-emerald-500/20 cursor-pointer"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingClassId(null);
+                                setEditingClassName('');
+                              }}
+                              className="bg-slate-800 hover:bg-slate-700 text-slate-400 font-bold text-[10px] py-1 px-3 rounded-lg border border-slate-700 cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <div>
+                              <div className="text-sm font-bold text-white">Class {cl.name}</div>
+                              <div className="text-[10px] text-slate-500 font-semibold mt-0.5">
+                                {students.filter(s => s.class_id === cl.id).length} pupil(s) enrolled
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => {
+                                  setEditingClassId(cl.id);
+                                  setEditingClassName(cl.name);
+                                }}
+                                className="bg-slate-900 hover:bg-slate-850 border border-slate-800 text-[10px] text-indigo-400 font-bold py-1.5 px-3 rounded-lg cursor-pointer"
+                              >
+                                Rename
+                              </button>
+                              <button
+                                onClick={() => handleDeleteClass(cl.id, cl.name)}
+                                className="bg-slate-900 hover:bg-red-950/20 hover:border-red-500/20 text-[10px] text-slate-400 hover:text-red-300 font-bold border border-slate-800 py-1.5 px-3 rounded-lg cursor-pointer"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Right Column: Teacher Class Assignments */}
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-sm font-black text-indigo-400 uppercase tracking-widest mb-1">Academic Staff Assignments</h3>
+                  <p className="text-[11px] text-slate-500">Bind administrators and teachers to specific school classes.</p>
+                </div>
+
+                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+                  {staffList.length === 0 ? (
+                    <p className="text-slate-500 text-xs italic py-4">No staff members found.</p>
+                  ) : (
+                    staffList.map((st) => (
+                      <div
+                        key={st.id}
+                        className="bg-slate-950/40 border border-slate-800 rounded-2xl p-4 flex items-center justify-between"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl filter drop-shadow-sm select-none">{st.avatar_emoji}</span>
+                          <div>
+                            <div className="text-sm font-bold text-white">{st.username}</div>
+                            <div className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">
+                              {st.role}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <select
+                            value={st.class_id || ''}
+                            onChange={(e) => handleAssignStaffClass(st.id, e.target.value || null)}
+                            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-bold outline-none cursor-pointer focus:border-indigo-500"
+                          >
+                            <option value="">Unassigned</option>
+                            {classesList.map(cl => (
+                              <option key={cl.id} value={cl.id}>Class {cl.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
         )}
 
       </main>

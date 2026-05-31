@@ -3,6 +3,7 @@ import { verifySession } from '@/lib/session';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { notifyStaff, createNotification } from '@/lib/notifications';
 
 export async function POST(request: NextRequest) {
   try {
@@ -57,8 +58,28 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      return { badgeAwarded };
+      return { badgeAwarded, worksheet };
     })();
+
+    // Notify staff of student worksheet completion
+    try {
+      const wsTitle = result.worksheet?.title || 'a worksheet';
+      notifyStaff(
+        'Worksheet Submitted 📈',
+        `${session.username} completed "${wsTitle}" with a score of ${Math.round(score)}%.`
+      );
+
+      if (result.badgeAwarded) {
+        const catName = result.worksheet?.category_name || 'Subject';
+        createNotification(
+          studentId,
+          'Badge Earned! 🥇',
+          `Congratulations! You earned a ${catName} mastery badge for completing the Summit exercise!`
+        );
+      }
+    } catch (e) {
+      console.error('Failed to process submission notifications:', e);
+    }
 
     return NextResponse.json({ success: true, attemptId, badgeAwarded: result.badgeAwarded });
   } catch (error) {

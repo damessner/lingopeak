@@ -2,6 +2,7 @@ import db from '@/lib/db';
 import { verifySession } from '@/lib/session';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
+import { notifyStaff } from '@/lib/notifications';
 
 export async function POST(request: NextRequest) {
   try {
@@ -39,6 +40,23 @@ export async function POST(request: NextRequest) {
     }
 
     db.prepare('UPDATE writing_submissions SET completed = 1 WHERE id = ?').run(submissionId);
+
+    // Notify staff of writing submission finalization
+    try {
+      const promptInfo = db.prepare(`
+        SELECT p.title as prompt_title 
+        FROM writing_submissions s
+        JOIN writing_prompts p ON s.prompt_id = p.id
+        WHERE s.id = ?
+      `).get(submissionId) as { prompt_title: string };
+      const prTitle = promptInfo?.prompt_title || 'a writing prompt';
+      notifyStaff(
+        'Essay Finalized ✍️',
+        `${session.username} locked and finalized draft for "${prTitle}".`
+      );
+    } catch (e) {
+      console.error('Failed to broadcast finalize writing notification:', e);
+    }
 
     const updatedSubmission = db.prepare('SELECT id, draft_version, text, feedback_json, version_history_json, feedback_history_json, completed FROM writing_submissions WHERE id = ?')
       .get(submissionId) as any;
