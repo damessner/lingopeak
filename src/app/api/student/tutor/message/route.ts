@@ -4,6 +4,11 @@ import { verifySession } from '@/lib/session';
 import { generateCompletion } from '@/lib/aiService';
 import db from '@/lib/db';
 import crypto from 'crypto';
+import {
+  getMemory,
+  formatMemoryForPrompt,
+  parseAndPersistMemoryUpdates
+} from '@/lib/hermesMemory';
 
 export async function POST(req: Request) {
   const cookieStore = await cookies();
@@ -16,7 +21,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    
+
     // Check for clear chat action
     if (body.action === 'clear') {
       db.prepare('DELETE FROM tutor_messages WHERE student_id = ?').run(session.userId);
@@ -37,7 +42,13 @@ export async function POST(req: Request) {
     db.prepare('INSERT INTO tutor_messages (id, student_id, role, content) VALUES (?, ?, ?, ?)')
       .run(userMsgId, session.userId, 'user', message.trim());
 
-    // Query recent struggles for context injection
+    // ── Load student context ────────────────────────────────────────────────
+
+    // Persistent Hermes memory
+    const memory = getMemory(session.userId);
+    const memoryBlock = formatMemoryForPrompt(memory);
+
+    // Recent struggles (score < 80)
     const struggles = db.prepare(`
       SELECT w.title as worksheet_title, c.name as category_name, a.score
       FROM attempts a
@@ -48,7 +59,7 @@ export async function POST(req: Request) {
       LIMIT 3
     `).all(session.userId) as Array<{ worksheet_title: string; category_name: string; score: number }>;
 
-    // Query category mastery levels for context injection
+    // Per-category mastery
     const categoryMastery = db.prepare(`
       SELECT c.name as category_name, AVG(a.score) as avg_score
       FROM attempts a
@@ -71,7 +82,7 @@ export async function POST(req: Request) {
         categoryMastery.map(cm => `- ${cm.category_name}: ${Math.round(cm.avg_score)}%`).join('\n');
     }
 
-    // 1. Construct System Prompt
+    // ── Build System Prompt ─────────────────────────────────────────────────
     const systemPrompt = `You are Hermes, a friendly, highly persistent, and encouraging AI ESL (English as a Second Language) Tutor on the LingoPeak platform.
 Your goal is to help the student learn English naturally and dynamically.
 Follow these guidelines:
@@ -79,20 +90,23 @@ Follow these guidelines:
 - Use scaffolding: ask encouraging follow-up questions and prompt them to correct their own typos or grammar slips rather than giving the answer away instantly.
 - Speak in a friendly, conversational tone. Keep responses relatively brief (1-3 paragraphs) to avoid overwhelming the learner.
 - Correct grammar or spelling mistakes politely if you notice them in the student's text.
-- Provide word stress guides in capital letters inside brackets for multi-syllabic vocabulary words that may be difficult (e.g., de-VEL-op, pho-to-GRAPH-ic, par-TIC-u-lar) to guide the student's pronunciation.${struggleContext}${masteryContext}`;
+- Provide word stress guides in capital letters inside brackets for multi-syllabic vocabulary words that may be difficult (e.g., de-VEL-op, pho-to-GRAPH-ic, par-TIC-u-lar) to guide the student's pronunciation.
+- When the student shares a personal goal, name, preferred topic, or important fact, embed a <!--MEMORY_UPDATE:{"key":"value"}--> tag at the very end of your reply (hidden from the student). Use snake_case keys like "learning_goal", "name", "weak_area", "last_topic". Never show these tags directly.${struggleContext}${masteryContext}${memoryBlock}`;
 
-    // 2. Format historical dialogue for completion prompt
+    // Format dialogue history
     const formattedHistory = (history || [])
       .map(m => `${m.role === 'user' ? 'Student' : 'Hermes'}: ${m.content}`)
       .join('\n');
 
     const promptText = `${systemPrompt}\n\n${formattedHistory}\nStudent: ${message.trim()}\nHermes:`;
 
-    // 3. Invoke aiService (uses configured OpenCode Zen provider)
-    const reply = await generateCompletion(promptText, false);
-    const cleanReply = reply.trim();
+    // ── Invoke AI ───────────────────────────────────────────────────────────
+    const rawReply = await generateCompletion(promptText, false);
 
-    // Save the assistant's reply to persistent history
+    // Parse + persist any memory updates hidden in the reply, strip tags from student-visible text
+    const cleanReply = parseAndPersistMemoryUpdates(session.userId, rawReply.trim());
+
+    // Save assistant reply to persistent history
     const assistantMsgId = crypto.randomUUID();
     db.prepare('INSERT INTO tutor_messages (id, student_id, role, content) VALUES (?, ?, ?, ?)')
       .run(assistantMsgId, session.userId, 'assistant', cleanReply);

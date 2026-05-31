@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import WorksheetsTab from '@/components/teacher/builder/WorksheetsTab';
 import NotificationBell from '@/components/NotificationBell';
+import TeamsSettingsPanel from '@/components/teacher/TeamsSettingsPanel';
 
 interface Student {
   id: string;
@@ -69,7 +70,7 @@ export default function TeacherDashboardClient({
   const router = useRouter();
 
   // Navigation state
-  const [activeTab, setActiveTab] = useState<'pupils' | 'heatmap' | 'struggles' | 'ai-revision' | 'worksheets' | 'pending' | 'admin' | 'classes'>('heatmap');
+  const [activeTab, setActiveTab] = useState<'pupils' | 'heatmap' | 'struggles' | 'ai-revision' | 'worksheets' | 'pending' | 'admin' | 'classes' | 'hermes'>('heatmap');
 
   // Class selection state (default to first class if available)
   const [selectedClassId, setSelectedClassId] = useState<string>(classes[0]?.id || '');
@@ -541,7 +542,17 @@ export default function TeacherDashboardClient({
                 : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:text-slate-200'
             }`}
           >
-            🏫 Classes & Roster
+            🏫 Classes &amp; Roster
+          </button>
+          <button
+            onClick={() => setActiveTab('hermes')}
+            className={`text-xs font-bold py-2.5 px-5 rounded-xl border transition-all cursor-pointer ${
+              activeTab === 'hermes'
+                ? 'bg-violet-600 border-violet-400 text-white shadow-lg shadow-violet-500/10'
+                : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            🤖 Hermes &amp; Teams
           </button>
           {sessionRole === 'ADMIN' && (
             <button
@@ -1143,6 +1154,62 @@ export default function TeacherDashboardClient({
                       </div>
                     ))
                   )}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+        {/* HERMES & TEAMS TAB */}
+        {activeTab === 'hermes' && (
+          <section className="space-y-6">
+            <div className="border-b border-slate-800/80 pb-4">
+              <h2 className="text-xl font-extrabold text-white tracking-wide uppercase">🤖 Hermes AI Coach &amp; MS Teams</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Configure push notifications and manage Hermes's student memory.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* MS Teams Webhook */}
+              <TeamsSettingsPanel />
+
+              {/* Cron Coach Info */}
+              <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 space-y-4">
+                <h3 className="font-bold text-white text-sm">📅 Automated Coaching Schedule</h3>
+                <p className="text-xs text-slate-400">
+                  The Hermes cron coach runs as a background script and sends personalised study tips
+                  to each student's tutor chat every morning.
+                </p>
+                <div className="space-y-2">
+                  <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Daily (Mon–Fri 08:00)</p>
+                    <code className="text-xs text-indigo-300 font-mono">npx tsx scripts/cron-coach.ts</code>
+                  </div>
+                  <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Weekly Report (Fridays 17:00)</p>
+                    <code className="text-xs text-indigo-300 font-mono">npx tsx scripts/cron-coach.ts weekly</code>
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  Add these as Windows Task Scheduler jobs or Linux cron entries.
+                  Requires <code className="text-slate-400">AI_API_KEY</code> and <code className="text-slate-400">DATABASE_PATH</code> env vars.
+                </p>
+              </div>
+            </div>
+
+            {/* Memory viewer */}
+            <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 space-y-4">
+              <h3 className="font-bold text-white text-sm">🧠 Hermes Student Memory</h3>
+              <p className="text-xs text-slate-400">
+                Hermes automatically remembers facts about each student (learning goals, weak areas, preferred topics)
+                to personalise every conversation. Use the API to inspect or clear a student's memory:
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">View memory</p>
+                  <code className="text-xs text-green-300 font-mono">GET /api/teacher/hermes/memory?studentId=...</code>
+                </div>
+                <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Clear all memory</p>
+                  <code className="text-xs text-red-300 font-mono">DELETE /api/teacher/hermes/memory?studentId=...</code>
                 </div>
               </div>
             </div>

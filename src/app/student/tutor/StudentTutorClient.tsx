@@ -47,6 +47,8 @@ export default function StudentTutorClient({
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(true);
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
   // Statistics state
   const [stats, setStats] = useState<StudentStats>({
@@ -99,6 +101,41 @@ export default function StudentTutorClient({
       utterance.rate = 0.85; // Speak slightly slower for ESL learners
       window.speechSynthesis.speak(utterance);
     }
+  };
+
+  // Web Speech API Voice Input (STT)
+  const handleMicToggle = () => {
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('Voice input is not supported in your browser. Try Chrome or Edge.');
+      return;
+    }
+
+    if (listening) {
+      recognitionRef.current?.stop();
+      setListening(false);
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => setListening(true);
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      // Auto-send the spoken message directly
+      handleSend(transcript);
+    };
+
+    recognition.start();
   };
 
   const handleSend = async (textToSend: string) => {
@@ -434,14 +471,31 @@ export default function StudentTutorClient({
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={`Send message to Hermes...`}
-              disabled={loading}
-              className="flex-grow bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-xs text-slate-200 font-medium outline-none focus:border-indigo-500 transition-colors"
+              placeholder={listening ? '🎙️ Listening… speak now' : `Send message to Hermes...`}
+              disabled={loading || listening}
+              className={`flex-grow bg-slate-950 border rounded-2xl px-4 py-3 text-xs text-slate-200 font-medium outline-none transition-colors ${
+                listening ? 'border-red-500/60 animate-pulse' : 'border-slate-800 focus:border-indigo-500'
+              }`}
             />
-            
+
+            {/* Mic button */}
+            <button
+              type="button"
+              onClick={handleMicToggle}
+              disabled={loading}
+              title={listening ? 'Stop listening' : 'Speak to Hermes'}
+              className={`p-3 rounded-2xl font-extrabold text-xs border transition-all ${
+                listening
+                  ? 'bg-red-600 border-red-500 text-white shadow-lg shadow-red-500/30 animate-pulse'
+                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-indigo-300 hover:border-indigo-500'
+              }`}
+            >
+              🎙️
+            </button>
+
             <button
               type="submit"
-              disabled={loading || !input.trim()}
+              disabled={loading || !input.trim() || listening}
               className="bg-indigo-650 hover:bg-indigo-600 disabled:bg-slate-900 text-white disabled:text-slate-600 px-5 py-3 rounded-2xl font-extrabold text-xs cursor-pointer disabled:cursor-not-allowed border border-indigo-500/20 shadow-sm transition-all"
             >
               Send ⚡
@@ -454,8 +508,9 @@ export default function StudentTutorClient({
 
       {/* Footer */}
       <footer className="border-t border-slate-900 bg-slate-950 py-4 text-center text-[10px] text-slate-500">
-        <p>© 2026 LingoPeak. Powered by OpenCode Zen AI. Self-hosted school platform.</p>
+        <p>© 2026 LingoPeak. Powered by DeepSeek V4 Flash via OpenCode Zen. Self-hosted school platform.</p>
       </footer>
+
     </div>
   );
 }

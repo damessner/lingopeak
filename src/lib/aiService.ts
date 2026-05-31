@@ -15,7 +15,7 @@ function getAIConfig(): AIServiceConfig {
   const provider = (process.env.AI_PROVIDER || 'GEMINI').toUpperCase() as 'GEMINI' | 'OPENCODE_ZEN';
   const apiKey = process.env.AI_API_KEY || '';
   const endpointUrl = process.env.AI_ENDPOINT_URL || 'https://api.opencode.ai/v1/chat/completions';
-  const modelName = process.env.AI_MODEL_NAME || (provider === 'GEMINI' ? 'gemini-2.5-flash' : 'zen-model');
+  const modelName = process.env.AI_MODEL_NAME || (provider === 'GEMINI' ? 'gemini-2.5-flash' : 'deepseek-v4-flash');
 
   return { provider, apiKey, endpointUrl, modelName };
 }

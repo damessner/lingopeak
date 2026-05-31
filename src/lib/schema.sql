@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
   role TEXT DEFAULT 'STUDENT', -- STUDENT, TEACHER, ADMIN
   avatar_emoji TEXT DEFAULT '🎒',
   class_id TEXT,
+  teams_webhook_url TEXT,         -- MS Teams incoming webhook URL for push notifications
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(class_id) REFERENCES classes(id) ON DELETE SET NULL
 );
@@ -136,6 +137,8 @@ CREATE TABLE IF NOT EXISTS tutor_messages (
   student_id TEXT NOT NULL,
   role TEXT NOT NULL, -- user, assistant
   content TEXT NOT NULL,
+  is_push INTEGER DEFAULT 0, -- 0 = false, 1 = true
+  origin TEXT DEFAULT 'chat', -- chat, cron_warmup, cron_remedial
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE
 );
@@ -165,3 +168,15 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+
+-- Student Memories Table (Hermes AI Tutor Long-Term Memory)
+CREATE TABLE IF NOT EXISTS student_memories (
+  student_id TEXT NOT NULL,
+  key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(student_id, key),
+  FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_student_memories_student ON student_memories(student_id);

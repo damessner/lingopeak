@@ -100,6 +100,44 @@ function initDb() {
       }
     }
 
+    try {
+      db.prepare('SELECT student_id FROM student_memories LIMIT 1').get();
+    } catch (e) {
+      console.log('Migrating: Creating student_memories table...');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS student_memories (
+          student_id TEXT NOT NULL,
+          key TEXT NOT NULL,
+          value TEXT NOT NULL,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY(student_id, key),
+          FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_student_memories_student ON student_memories(student_id);
+      `);
+    }
+
+    try {
+      db.prepare('SELECT teams_webhook_url FROM users LIMIT 1').get();
+    } catch (e) {
+      console.log('Migrating: Adding teams_webhook_url column to users table...');
+      try {
+        db.exec('ALTER TABLE users ADD COLUMN teams_webhook_url TEXT');
+      } catch (err: any) {}
+    }
+
+    try {
+      db.prepare('SELECT is_push FROM tutor_messages LIMIT 1').get();
+    } catch (e) {
+      console.log('Migrating: Adding push columns to tutor_messages table...');
+      try {
+        db.exec('ALTER TABLE tutor_messages ADD COLUMN is_push INTEGER DEFAULT 0');
+      } catch (err: any) {}
+      try {
+        db.exec("ALTER TABLE tutor_messages ADD COLUMN origin TEXT DEFAULT 'chat'");
+      } catch (err: any) {}
+    }
+
     // 1.6 Legacy Account Invalidation Migration
     try {
       const legacyCountResult = db.prepare("SELECT count(*) as count FROM users WHERE password_salt IS NULL OR password_salt = ''").get() as any;
