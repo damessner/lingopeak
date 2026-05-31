@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { verifySession } from '@/lib/session';
 import db from '@/lib/db';
+import Link from 'next/link';
 
 async function handleLogout() {
   'use server';
@@ -54,13 +55,13 @@ export default async function StudentDashboard() {
           </div>
           
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-3 bg-slate-900/80 border border-slate-800 rounded-2xl px-4 py-1.5 shadow-sm">
+            <Link href="/student/profile" className="flex items-center gap-3 bg-slate-900/80 hover:bg-slate-900 border border-slate-800 rounded-2xl px-4 py-1.5 shadow-sm hover:border-indigo-500/30 transition-all cursor-pointer">
               <span className="text-2xl filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.15)]">{session.avatarEmoji}</span>
               <div className="text-left leading-tight">
                 <div className="text-sm font-bold text-white max-w-[120px] truncate">{session.username}</div>
                 <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Class {className}</div>
               </div>
-            </div>
+            </Link>
 
             <form action={handleLogout}>
               <button
