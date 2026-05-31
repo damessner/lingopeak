@@ -74,8 +74,14 @@ export default function AICoPilotPanel({
     }
   }, [requests]);
 
-  const handleGenerate = async () => {
-    if (!prompt.trim()) return;
+  const [lastAttemptedPrompt, setLastAttemptedPrompt] = useState<string>('');
+  const [lastAttemptedCount, setLastAttemptedCount] = useState<number>(5);
+
+  const handleGenerate = async (overridePrompt?: string, overrideCount?: number) => {
+    const activePrompt = overridePrompt !== undefined ? overridePrompt : prompt.trim();
+    const activeCount = overrideCount !== undefined ? overrideCount : count;
+
+    if (!activePrompt) return;
     
     // Check local quota
     const activeRequests = loadRequests();
@@ -86,6 +92,8 @@ export default function AICoPilotPanel({
 
     setGenerating(true);
     setError(null);
+    setLastAttemptedPrompt(activePrompt);
+    setLastAttemptedCount(activeCount);
 
     try {
       const res = await fetch('/api/teacher/worksheets/ai-generate', {
@@ -93,9 +101,9 @@ export default function AICoPilotPanel({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'generate_worksheet',
-          prompt: prompt.trim(),
+          prompt: activePrompt,
           tier,
-          count
+          count: activeCount
         })
       });
 
@@ -136,6 +144,7 @@ export default function AICoPilotPanel({
 
           onGenerateQuestions(processed);
           setPrompt('');
+          setLastAttemptedPrompt('');
           onToggle(); // Close sidebar panel on success
         }
       } else {
@@ -147,6 +156,10 @@ export default function AICoPilotPanel({
     } finally {
       setGenerating(false);
     }
+  };
+
+  const handleRetry = () => {
+    handleGenerate(lastAttemptedPrompt, lastAttemptedCount);
   };
 
   const remainingQuota = Math.max(0, 5 - requests.length);
@@ -165,8 +178,18 @@ export default function AICoPilotPanel({
       {isOpen && (
         <div className="p-4 border-t border-indigo-500/10 space-y-4 bg-indigo-950/20 animate-scaleUp">
           {error && (
-            <div className="p-3 bg-red-950/80 border border-red-500/40 text-red-200 rounded-xl text-[10px] font-bold">
-              ⚠️ {error}
+            <div className="p-3 bg-red-950/80 border border-red-500/40 text-red-200 rounded-xl text-[10px] font-bold flex justify-between items-center gap-2">
+              <span>⚠️ {error}</span>
+              {lastAttemptedPrompt && (
+                <button
+                  type="button"
+                  onClick={handleRetry}
+                  disabled={generating || cooldownLeft > 0}
+                  className="bg-indigo-600 hover:bg-indigo-550 text-white font-extrabold text-[9px] px-3 py-1.5 rounded-xl cursor-pointer disabled:cursor-not-allowed select-none whitespace-nowrap transition-colors flex items-center gap-1 shadow-md"
+                >
+                  <span>🔄 Retry Prompt</span>
+                </button>
+              )}
             </div>
           )}
 
@@ -207,7 +230,7 @@ export default function AICoPilotPanel({
 
             <button
               type="button"
-              onClick={handleGenerate}
+              onClick={() => handleGenerate()}
               disabled={generating || !prompt.trim() || cooldownLeft > 0}
               className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 text-white disabled:text-slate-650 border border-indigo-500/20 text-xs font-bold py-2 px-5 rounded-xl cursor-pointer disabled:cursor-not-allowed transition-all"
             >

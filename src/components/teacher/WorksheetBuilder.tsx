@@ -19,9 +19,16 @@ interface WorksheetBuilderProps {
   worksheet: Worksheet | null;
   onSave: () => void;
   onCancel: () => void;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
-export default function WorksheetBuilder({ categories, worksheet, onSave, onCancel }: WorksheetBuilderProps) {
+export default function WorksheetBuilder({
+  categories,
+  worksheet,
+  onSave,
+  onCancel,
+  onDirtyChange
+}: WorksheetBuilderProps) {
   // Leverage extracted custom state & actions hook
   const {
     title,
@@ -42,7 +49,8 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
     draftTime,
     recoverDraft,
     discardDraft,
-    localStorageKey
+    localStorageKey,
+    isDirty
   } = useWorksheetBuilder({ categories, worksheet });
 
   const [saving, setSaving] = useState(false);
@@ -55,6 +63,23 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
   const [collapsedQuestions, setCollapsedQuestions] = useState<Record<string, boolean>>({});
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
+
+  // Trigger onDirtyChange callback
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+
+  // Window beforeunload listener
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
 
   // Form helper: add a new question
   const handleAddQuestion = (type: QuestionType) => {
@@ -208,6 +233,69 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
     setQuestions(updated);
   };
 
+  // Export JSON handler
+  const handleExportJSON = () => {
+    const data = {
+      title,
+      categoryId,
+      tier,
+      badgeEmoji,
+      questions
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${title.trim().replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'worksheet'}_export.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Import JSON handler
+  const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (isDirty) {
+      if (!confirm('Importing this file will overwrite your current worksheet. Are you sure you want to proceed?')) {
+        e.target.value = '';
+        return;
+      }
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target?.result as string);
+        if (parsed.questions && Array.isArray(parsed.questions)) {
+          setTitle(parsed.title || '');
+          setCategoryId(parsed.categoryId || categories[0]?.id || '');
+          setTier(parsed.tier || 'EXPLORER');
+          setBadgeEmoji(parsed.badgeEmoji || '🥇');
+          setQuestions(parsed.questions);
+          setError(null);
+          displayMessage('Worksheet JSON imported successfully!', 'success');
+        } else {
+          alert('Invalid JSON structure: missing questions array.');
+        }
+      } catch (err) {
+        alert('Failed to parse JSON file.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  // Cancel intercept handler
+  const handleCancelClick = () => {
+    if (isDirty) {
+      if (!confirm('You have unsaved changes. Are you sure you want to leave?')) {
+        return;
+      }
+    }
+    onCancel();
+  };
+
   // Keyboard Shortcuts hook integrating undo/redo callbacks
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -265,6 +353,7 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
     setSaving(true);
     setError(null);
 
+    // Dynamic processing of drag and drop correct answers
     const processedQuestions = questions.map((q) => {
       const qCopy = { ...q } as any;
       if (q.type === 'drag_and_drop') {
@@ -339,7 +428,7 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
       )}
 
       {/* Header */}
-      <div className="border-b border-slate-800/80 pb-4 flex justify-between items-center">
+      <div className="border-b border-slate-800/80 pb-4 flex justify-between items-center flex-wrap gap-4">
         <div>
           <span className="text-[10px] bg-indigo-500/20 text-indigo-300 font-black px-2.5 py-1 rounded-lg border border-indigo-500/10 uppercase tracking-widest">
             {worksheet?.id ? 'Edit Custom Widget' : 'New Custom Widget'}
@@ -351,7 +440,7 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
         
         <div className="flex gap-2 items-center flex-wrap">
           {/* Undo/Redo Buttons */}
-          <div className="flex bg-slate-950 border border-slate-850 rounded-xl overflow-hidden mr-2">
+          <div className="flex bg-slate-950 border border-slate-855 rounded-xl overflow-hidden mr-2">
             <button
               type="button"
               onClick={undo}
@@ -370,6 +459,30 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
             >
               ↪ Redo
             </button>
+          </div>
+
+          {/* Export/Import Buttons */}
+          <div className="flex bg-slate-950 border border-slate-855 rounded-xl overflow-hidden mr-2">
+            <button
+              type="button"
+              onClick={handleExportJSON}
+              className="text-xs hover:bg-slate-900 text-indigo-400 hover:text-indigo-300 font-bold px-3.5 py-2 cursor-pointer transition-colors border-r border-slate-855 select-none"
+              title="Export worksheet as JSON file"
+            >
+              📥 Export
+            </button>
+            <label
+              className="text-xs hover:bg-slate-900 text-indigo-400 hover:text-indigo-300 font-bold px-3.5 py-2 cursor-pointer transition-colors select-none flex items-center"
+              title="Import worksheet from JSON file"
+            >
+              📤 Import
+              <input
+                type="file"
+                accept=".json"
+                onChange={handleImportJSON}
+                className="hidden"
+              />
+            </label>
           </div>
           
           <button
@@ -542,7 +655,7 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
         <div className="flex justify-end gap-3 pt-6 border-t border-slate-800/80 font-bold">
           <button
             type="button"
-            onClick={onCancel}
+            onClick={handleCancelClick}
             className="bg-slate-900 hover:bg-slate-855 text-slate-400 hover:text-slate-300 border border-slate-800 text-xs py-2.5 px-6 rounded-xl cursor-pointer transition-all"
             style={{ minHeight: '40px' }}
           >

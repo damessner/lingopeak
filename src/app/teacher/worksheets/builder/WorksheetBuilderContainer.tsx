@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import WorksheetBuilder from '@/components/teacher/WorksheetBuilder';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -25,6 +26,7 @@ export default function WorksheetBuilderContainer({
   sessionAvatar
 }: WorksheetBuilderContainerProps) {
   const router = useRouter();
+  const [isDirty, setIsDirty] = useState(false);
 
   const handleSave = () => {
     router.push('/teacher/dashboard?tab=worksheets');
@@ -32,6 +34,16 @@ export default function WorksheetBuilderContainer({
   };
 
   const handleCancel = () => {
+    router.push('/teacher/dashboard?tab=worksheets');
+  };
+
+  const handleBackClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (isDirty) {
+      if (!confirm('You have unsaved changes. Are you sure you want to leave?')) {
+        return;
+      }
+    }
     router.push('/teacher/dashboard?tab=worksheets');
   };
 
@@ -44,13 +56,13 @@ export default function WorksheetBuilderContainer({
       {/* Header */}
       <header className="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/teacher/dashboard?tab=worksheets" className="flex items-center gap-3">
+          <button onClick={handleBackClick} className="flex items-center gap-3 text-left focus:outline-none cursor-pointer">
             <span className="text-3xl select-none">⛰️</span>
             <div>
               <span className="text-xl font-extrabold text-white tracking-tight">LingoPeak</span>
               <span className="text-xs text-slate-400 font-bold ml-2">← Back to Staff Portal</span>
             </div>
-          </Link>
+          </button>
           
           <div className="flex items-center gap-3 bg-slate-900/80 border border-slate-800 rounded-2xl px-4 py-1.5 shadow-sm">
             <span className="text-2xl">{sessionAvatar}</span>
@@ -66,6 +78,7 @@ export default function WorksheetBuilderContainer({
           worksheet={worksheet}
           onSave={handleSave}
           onCancel={handleCancel}
+          onDirtyChange={setIsDirty}
         />
       </main>
 

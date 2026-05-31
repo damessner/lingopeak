@@ -130,6 +130,16 @@ CREATE TABLE IF NOT EXISTS dictionary_cache (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Tutor Messages Table (Hermes AI Tutor)
+CREATE TABLE IF NOT EXISTS tutor_messages (
+  id TEXT PRIMARY KEY,
+  student_id TEXT NOT NULL,
+  role TEXT NOT NULL, -- user, assistant
+  content TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 -- Database Indexes for Optimization
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_users_class_id ON users(class_id);
@@ -141,4 +151,4 @@ CREATE INDEX IF NOT EXISTS idx_categories_unit_id ON categories(unit_id);
 CREATE INDEX IF NOT EXISTS idx_badges_student_id ON badges(student_id);
 CREATE INDEX IF NOT EXISTS idx_writing_submissions_student ON writing_submissions(student_id);
 CREATE INDEX IF NOT EXISTS idx_writing_submissions_prompt ON writing_submissions(prompt_id);
-
+CREATE INDEX IF NOT EXISTS idx_tutor_messages_student ON tutor_messages(student_id);

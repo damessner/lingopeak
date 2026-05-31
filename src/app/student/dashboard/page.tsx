@@ -131,14 +131,14 @@ export default async function StudentDashboard() {
         </section>
 
         {/* Special Learning Arenas */}
-        <section className="mb-10 grid grid-cols-1 md:grid-cols-2 gap-6 animate-fadeIn">
+        <section className="mb-10 grid grid-cols-1 md:grid-cols-3 gap-6 animate-fadeIn">
           <div className="group bg-slate-900/40 border border-slate-800 rounded-3xl p-6 hover:border-indigo-500/30 hover:bg-slate-900/60 transition-all duration-300 shadow-lg flex gap-5">
             <span className="text-4xl select-none bg-indigo-500/10 p-3 rounded-2xl border border-indigo-500/10 h-fit self-center">📚</span>
             <div className="flex flex-col justify-between">
               <div>
                 <h3 className="text-lg font-bold text-white tracking-tight">Progressive Book Club</h3>
                 <p className="text-slate-400 text-xs mt-1 leading-relaxed">
-                  Read interactive stories. Tap words to get instant definition/translations. Complete checkpoints to unlock chapters!
+                  Read interactive stories. Tap words to get definition/translations. Complete checkpoints to unlock chapters!
                 </p>
               </div>
               <a
@@ -164,6 +164,24 @@ export default async function StudentDashboard() {
                 className="mt-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2 px-5 rounded-xl border border-indigo-500/20 transition-all w-fit cursor-pointer text-center shadow-md"
               >
                 Start Writing
+              </a>
+            </div>
+          </div>
+
+          <div className="group bg-slate-900/40 border border-slate-800 rounded-3xl p-6 hover:border-indigo-500/30 hover:bg-slate-900/60 transition-all duration-300 shadow-lg flex gap-5">
+            <span className="text-4xl select-none bg-indigo-500/10 p-3 rounded-2xl border border-indigo-500/10 h-fit self-center font-bold">⚡</span>
+            <div className="flex flex-col justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-white tracking-tight">Hermes AI Tutor</h3>
+                <p className="text-slate-400 text-xs mt-1 leading-relaxed">
+                  Talk to your stateful tutor. Practice conversation, review grammar mistakes, and build vocabulary with audio guides.
+                </p>
+              </div>
+              <a
+                href="/student/tutor"
+                className="mt-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2 px-5 rounded-xl border border-indigo-500/20 transition-all w-fit cursor-pointer text-center shadow-md"
+              >
+                Talk to Tutor
               </a>
             </div>
           </div>

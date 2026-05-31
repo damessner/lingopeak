@@ -187,6 +187,15 @@ export function useWorksheetBuilder({ categories, worksheet }: UseWorksheetBuild
     setDraftData(null);
   }, [localStorageKey]);
 
+  const isDirty = !(
+    title === (worksheet?.title || '') &&
+    categoryId === (worksheet?.category_id || categories[0]?.id || '') &&
+    tier === (worksheet?.tier || 'EXPLORER') &&
+    badgeEmoji === (worksheet?.badge_emoji || '🥇') &&
+    questions.length === initialQuestions.length &&
+    JSON.stringify(questions) === JSON.stringify(initialQuestions)
+  );
+
   return {
     title,
     setTitle,
@@ -206,6 +215,7 @@ export function useWorksheetBuilder({ categories, worksheet }: UseWorksheetBuild
     draftTime,
     recoverDraft,
     discardDraft,
-    localStorageKey
+    localStorageKey,
+    isDirty
   };
 }

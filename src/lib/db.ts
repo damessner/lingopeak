@@ -55,6 +55,23 @@ function initDb() {
     }
 
     try {
+      db.prepare('SELECT id FROM tutor_messages LIMIT 1').get();
+    } catch (e) {
+      console.log('Migrating: Creating tutor_messages table...');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS tutor_messages (
+          id TEXT PRIMARY KEY,
+          student_id TEXT NOT NULL,
+          role TEXT NOT NULL,
+          content TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_tutor_messages_student ON tutor_messages(student_id);
+      `);
+    }
+
+    try {
       db.prepare('SELECT badge_emoji FROM worksheets LIMIT 1').get();
     } catch (e) {
       console.log('Migrating: Adding badge_emoji column to worksheets table...');

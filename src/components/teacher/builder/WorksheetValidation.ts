@@ -1,4 +1,4 @@
-import { Question } from '@/lib/worksheet-types';
+import type { Question } from '../../../lib/worksheet-types.ts';
 
 /**
  * Validates a single question component details.

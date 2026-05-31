@@ -1,45 +1,43 @@
-# Worksheet Builder — Implementation Audit
+# LingoPeak — Worksheet Builder Status
 
-**Audit date**: 2026-05-31
-**Source**: Strategic Improvement Plan (previous version of this file) vs current codebase
-
----
-
-## ✅ Fully Implemented
-
-| Area | Detail |
-|------|--------|
-| **Missing question types** | All 6 types added: `drag_and_drop`, `category_sorting`, `correct_the_mistake`, `choice_matrix`, `crossword`, `word_search`. Dialogue exists at worksheet level (flag + transcript), not as a question type — correct architecture. |
-| **Grid generators** | `src/lib/gridGenerators.ts` auto-generates crossword and word search grids from word lists (matches recommendation — no manual grid editing). |
-| **Drag-and-drop reordering** | Native HTML5 DnD on question cards in the builder. |
-| **Collapsible question cards** | Each card can collapse to title+type to save vertical space. |
-| **Quick-add palette** | Expanded from 4 to 10 question types in the add-question dropdown. |
-| **Keyboard shortcuts** | Ctrl+S (save), Ctrl+Enter (save), Ctrl+Alt+N (new question). |
-
-## ⚠️ Partially Implemented
-
-| Area | What's there | What's missing |
-|------|-------------|----------------|
-| **Preview** | Inline grid previews for crossword and word search. | No general question preview (render actual student widget inline). No "Test Drive" mode (full WorksheetContainer in modal). |
-
-## ❌ Not Implemented
-
-| Area | Detail |
-|------|--------|
-| **Duplicate/clone question** | No button to copy a question within the builder. |
-| **Standalone builder page** | Builder is still embedded as a tab in `TeacherDashboardClient.tsx`. No `/teacher/worksheets/builder` route. Cannot deep-link to an editor session. |
-| **AI integration** | No AI generate, smart fill, curriculum-aligned generation, or any AI-assisted creation. (Student-facing AI for Summit + Writing Coach exists separately.) |
-| **Templates & cloning** | No template system, no clone-worksheet button, no "start from template" flow. |
-| **Test Drive preview** | No way to preview the full worksheet as a student would see it before saving/publishing. |
-| **Shared types** | `Question` interface is defined inline in `WorksheetBuilder.tsx` (lines 13-69). Not extracted to `src/lib/worksheet-types.ts` for reuse across builder + student player. |
-| **Modular file structure** | All builder code is in a single 1,370-line file (`WorksheetBuilder.tsx`). No `QuestionCard.tsx`, no type-specific editor files, no `QuestionTypePicker.tsx`, no `TemplatePicker.tsx`. |
+**Last updated**: 2026-05-31
 
 ---
 
-## Summary
+## ✅ Phases Complete
 
 | Phase | Items | Status |
 |-------|-------|--------|
-| **Phase 1** (Quick wins) | Question types, grid generators, DnD, collapsible cards, palette, shortcuts | ✅ Done |
-| **Phase 2** (Core experience) | Standalone page, AI generate+smart fill, preview/Test Drive, templates, cloning, shared types, modular files | ❌ Not started |
-| **Phase 3** (AI advanced) | Curriculum-aligned generation, worksheet variants, undo/redo, bulk ops, streaming AI | ❌ Not started |
+| **Phase 1** | 6 question types, grid generators, DnD, collapsible cards, palette, shortcuts | ✅ |
+| **Phase 2** | Standalone page, AI generate+smart fill, Test Drive modal, 8 templates, clone/duplicate, shared types, modular file split | ✅ |
+| **Phase 2.5** | useWorksheetBuilder hook, WorksheetValidation, AICoPilotPanel, ErrorBoundary, BadgeEmojiPicker, 8 template presets, WorksheetsTab extraction, undo/redo, autosave drafts, smart fill flash, quota cooldown, unsaved changes guard, JSON export/import, AI retry, loading skeleton, unit tests | ✅ |
+
+## Builder File Structure
+
+```
+src/components/teacher/builder/
+├── useWorksheetBuilder.ts         # State hook + undo/redo + autosave + draft recovery
+├── WorksheetValidation.ts         # Pure validation for all 10 question types
+├── AICoPilotPanel.tsx             # AI sidebar with quota tracking, cooldown, retry caching
+├── ErrorBoundary.tsx              # Class-based error boundary per card
+├── BadgeEmojiPicker.tsx           # Popover emoji grid picker
+├── QuestionCard.tsx               # DnD, collapse, duplicate, smart fill flash animation
+├── QuestionTypePicker.tsx         # Quick-add palette dropdown
+├── TemplatePicker.tsx             # 8 curriculum-aligned templates (327L)
+├── TestDriveModal.tsx             # Full student preview modal
+├── WorksheetsTab.tsx              # Extracted worksheets list from dashboard
+├── __tests__/
+│   └── WorksheetValidation.test.ts # 11 test cases, all 10 types
+└── editors/                       # 10 type-specific editor components
+```
+
+## Remaining Phase 3 (Future — Not Started)
+
+| Item | Description | Effort |
+|------|-------------|--------|
+| Curriculum-aligned AI generation | AI generates MORE! 1 unit-specific questions | Medium |
+| Worksheet variants | "Generate 3 difficulty variants" | Medium |
+| Undo/redo timeline UI | Visual history slider | Medium |
+| Bulk question ops | Multi-select, batch delete/move | Medium |
+| Streaming AI generation | Progressive streaming of AI questions | Large |
+| Hermes Agent integration | MCP server + Telegram/Slack teacher workflows | Medium |
