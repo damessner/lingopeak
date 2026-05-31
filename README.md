@@ -65,8 +65,8 @@ A full-featured, modular standalone builder for creating custom worksheets:
 - **Unit tests** — 11 test cases across all 10 question types
 - **Keyboard shortcuts** — Ctrl+S/Ctrl+Enter (save), Ctrl+Alt+N (new question)
 
-### 🤖 3. Coach — Socratic AI Learning Coach
-A Socratic AI tutor that never gives direct answers — it guides students through reasoning with hints, questions, and scaffolding:
+### 🤖 3. Coach — Socratic AI Learning Coach 2.0
+An autonomous Socratic AI tutor that never gives direct answers — it guides students through reasoning with hints, questions, and scaffolding, backed by a persistent narrative observation system:
 
 - **🧠 Persistent Memory** — remembers each student's goals, weak areas, and name across sessions via hidden `MEMORY_UPDATE` tags embedded in AI replies
 - **📊 Context-Aware Prompting** — injects recent worksheet failures and category mastery levels into every conversation, weaving targeted review into natural dialogue
@@ -76,6 +76,14 @@ A Socratic AI tutor that never gives direct answers — it guides students throu
 - **🔄 Spaced Repetition** — background cron daemon scans for weak areas (<60% score, >3 days since review) and sends Socratic review prompts to the student's chat
 - **📝 Agentic Practice Worksheets** — Coach can silently generate a personalized practice worksheet via `<!--CREATE_PRACTICE:{}-->` tag, rendered as a clickable link in chat
 - **❓ Worksheet Help Drawer** — floating "Ask Coach" button on every worksheet opens a slide-over Socratic assistant pre-seeded with the current question
+- **📓 Coach Notes** — narrative observations written to SQLite via `<!--COACH_NOTE:{}-->` tags, building a longitudinal record of each student's progress, struggles, and confidence
+- **🎯 Goal Tracking** — students set personal learning goals in chat; Coach tracks progress and asks for confirmation before marking complete
+- **📉 Confidence Detection** — Coach monitors for hedging/uncertainty patterns and logs observations (max 1/day) without interrupting the flow
+- **📋 Session Summaries** — every 5th exchange, Coach writes a professional narrative summary as a coach note
+- **🚨 Teacher Handover** — if a student fails 3+ worksheets in a category within 14 days, Coach auto-generates a high-priority alert and notifies the teacher via MS Teams
+- **📬 Weekly Recap** — cron generates a friendly weekly progress summary in each student's chat, archives stale notes, and broadcasts a class summary to the teacher's Teams webhook
+- **🔒 Teacher Note Privacy** — teacher-authored observations are excluded from the AI prompt context to prevent sensitive information from leaking into chat
+- **🗑️ Note Archival** — `archiveAndKeepRecentHigh()` runs weekly to prevent prompt bloat while preserving critical observations
 - **💬 Persistent Chat History** — last 15 messages loaded on mount, conversation survives page reloads, full reset available
 - **🤖 AI Coach Label** — clearly marked as AI in the UI
 
@@ -118,12 +126,13 @@ lingopeak/
 │   ├── uploads/                   # Teacher-uploaded audios, pictures, videos
 │   └── icons/                     # PWA manifest icons
 ├── scripts/
-│   └── cron-coach.ts              # Background spaced repetition + Teams alerts daemon
+│   └── cron-coach.ts              # Background spaced repetition + Teams alerts + weekly recap daemon
 ├── src/
 │   ├── app/
-│   │   ├── api/                   # 25+ API routes (auth, attempts, AI, tutor, teacher, admin)
+│   │   ├── api/                   # 30+ API routes (auth, attempts, AI, tutor, teacher, admin)
 │   │   │   ├── student/           # Attempts, writing, tutor, worksheet help, practice
-│   │   │   ├── teacher/           # Worksheets, roster, class-revision, teams webhook, hermes memory
+│   │   │   ├── teacher/           # Worksheets, roster, class-revision, teams webhook,
+│   │   │   │                      #   coach/notes (CRUD narrative observations)
 │   │   │   └── admin/             # Backup, curriculum generation
 │   │   ├── student/               # Dashboard, units, worksheets, book-club, writing, tutor, profile
 │   │   ├── teacher/               # Dashboard, reports, worksheet builder, approvals
@@ -136,11 +145,12 @@ lingopeak/
 │   │   └── ui/                    # Shared UI primitives
 │   └── lib/
 │       ├── db.ts                  # SQLite connection, migrations, seed data (15 units)
-│       ├── schema.sql             # 14 tables: users, units, worksheets, attempts, badges,
-│       │                          #   tutor_messages, student_memories, notifications, etc.
+│       ├── schema.sql             # 15 tables: users, units, worksheets, attempts, badges,
+│       │                          #   tutor_messages, student_memories, coach_notes, notifications, etc.
 │       ├── session.ts             # HMAC-signed cookie session
 │       ├── aiService.ts           # AI integrations (Gemini & OpenCode Zen)
 │       ├── hermesMemory.ts        # Per-student persistent memory read/write + tag parser
+│       ├── coachNotes.ts          # Coach narrative observations CRUD + tag parser + archival
 │       ├── teamsNotify.ts         # MS Teams Adaptive Card sender
 │       ├── gridGenerators.ts      # Crossword & word search grid auto-generation
 │       └── worksheet-types.ts     # Discriminated union types (10 question variants)
@@ -157,7 +167,7 @@ lingopeak/
 |------|--------|
 | **Syllabus Engine** (10 widgets, student player) | ✅ Complete |
 | **Worksheet Builder** (Phases 1, 2, 2.5) | ✅ Complete — hardened with tests, AI, autosave, undo/redo |
-| **Coach (Socratic AI Tutor)** — persistent memory, spaced repetition, voice, worksheet help, scaffolding, practice generation | ✅ Complete |
+| **Coach 2.0 (Socratic AI Learning Coach)** — persistent memory, notes, goals, scaffolding, spaced repetition, voice, worksheet help, practice generation, confidence detection, session summaries, teacher handover, weekly recaps | ✅ Complete |
 | **Book Club** | ✅ Complete — 1 seeded book with chapters |
 | **AI Writing Coach** | ✅ Complete |
 | **Summit AI Generator** | ✅ Complete |
@@ -230,16 +240,19 @@ Reload PM2 after making environment changes:
 pm2 reload lingopeak
 ```
 
-### Background Cron (Coach Spaced Repetition)
+### Background Cron (Coach Daemon)
 
-The spaced repetition daemon runs outside Next.js. Schedule it via Windows Task Scheduler or cron:
+The Coach daemon runs outside Next.js. Schedule via Windows Task Scheduler or cron:
 
 ```bash
-# Daily coaching (Mon–Fri 08:00)
+# Daily coaching — spaced repetition + confidence checks (Mon–Fri 08:00)
 npx tsx scripts/cron-coach.ts
 
-# Weekly class report (Fri 17:00)
+# Weekly teacher report — class averages + at-risk counts (Fri 17:00)
 npx tsx scripts/cron-coach.ts weekly
+
+# Weekly student recap — progress summary + note archival (Sun 18:00)
+npx tsx scripts/cron-coach.ts weekly-recap
 ```
 
 ---
