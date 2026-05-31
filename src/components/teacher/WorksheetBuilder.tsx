@@ -30,6 +30,7 @@ interface Worksheet {
   category_id: string;
   tier: 'EXPLORER' | 'VOYAGER' | 'CHALLENGER' | 'SUMMIT';
   questions_json: string;
+  badge_emoji?: string;
 }
 
 interface WorksheetBuilderProps {
@@ -43,6 +44,7 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
   const [title, setTitle] = useState(worksheet?.title || '');
   const [categoryId, setCategoryId] = useState(worksheet?.category_id || categories[0]?.id || '');
   const [tier, setTier] = useState<'EXPLORER' | 'VOYAGER' | 'CHALLENGER' | 'SUMMIT'>(worksheet?.tier || 'EXPLORER');
+  const [badgeEmoji, setBadgeEmoji] = useState(worksheet?.badge_emoji || '🥇');
   
   // Parse initial questions
   const getInitialQuestions = (): Question[] => {
@@ -236,7 +238,8 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
           title: title.trim(),
           categoryId,
           tier,
-          questions
+          questions,
+          badgeEmoji
         })
       });
 
@@ -285,7 +288,7 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
       <form onSubmit={handleSave} className="space-y-6">
         
         {/* Core details row */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="space-y-2 md:col-span-1">
             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Worksheet Title</label>
             <input
@@ -324,6 +327,31 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
               <option value="VOYAGER">VOYAGER (Medium)</option>
               <option value="CHALLENGER">CHALLENGER (Hard)</option>
               <option value="SUMMIT">SUMMIT (Test)</option>
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Reward Badge</label>
+            <select
+              value={badgeEmoji}
+              onChange={(e) => setBadgeEmoji(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-300 font-bold outline-none focus:border-indigo-500 transition-colors cursor-pointer"
+            >
+              <option value="🥇">🥇 Gold Medal</option>
+              <option value="🥈">🥈 Silver Medal</option>
+              <option value="🥉">🥉 Bronze Medal</option>
+              <option value="🏆">🏆 Trophy</option>
+              <option value="🎖️">🎖️ Military Medal</option>
+              <option value="⭐">⭐ Star</option>
+              <option value="🎯">🎯 Target</option>
+              <option value="🚀">🚀 Rocket</option>
+              <option value="💡">💡 Idea Bulb</option>
+              <option value="🧩">🧩 Puzzle Piece</option>
+              <option value="🎨">🎨 Art Palette</option>
+              <option value="🧠">🧠 Brain</option>
+              <option value="👑">👑 Crown</option>
+              <option value="🦉">🦉 Owl</option>
+              <option value="🎒">🎒 Backpack</option>
             </select>
           </div>
         </div>

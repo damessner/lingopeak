@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS worksheets (
   title TEXT NOT NULL,
   tier TEXT NOT NULL, -- EXPLORER, VOYAGER, CHALLENGER, SUMMIT
   questions_json TEXT NOT NULL, -- JSON formatted questions
+  badge_emoji TEXT DEFAULT '🥇',
   audio_url TEXT,
   image_url TEXT,
   video_url TEXT,

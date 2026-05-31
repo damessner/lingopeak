@@ -111,6 +111,31 @@ export default function TeacherDashboardClient({
     }
   }, [activeTab]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab');
+      const action = params.get('action');
+      const categoryId = params.get('categoryId');
+
+      if (tab === 'worksheets') {
+        setActiveTab('worksheets');
+        fetchWorksheets();
+
+        if (action === 'new' && categoryId) {
+          setCurrentWorksheet({
+            title: '',
+            category_id: categoryId,
+            tier: 'EXPLORER',
+            questions_json: '[]',
+            badge_emoji: '🥇'
+          });
+          setIsEditingWorksheet(true);
+        }
+      }
+    }
+  }, []);
+
   const handleDeleteWorksheet = async (id: string, title: string) => {
     if (!confirm(`Are you sure you want to delete the worksheet "${title}"?`)) return;
     try {
@@ -819,8 +844,9 @@ export default function TeacherDashboardClient({
 
                           return (
                             <tr key={ws.id} className="hover:bg-slate-900/10">
-                              <td className="py-3 px-5 font-bold text-white max-w-xs truncate">
-                                {ws.title}
+                              <td className="py-3 px-5 font-bold text-white max-w-xs truncate flex items-center gap-2">
+                                <span className="text-base select-none">{ws.badge_emoji || '🥇'}</span>
+                                <span className="truncate">{ws.title}</span>
                               </td>
                               <td className="py-3 px-4 text-slate-300">
                                 {ws.unit_title ? `[${ws.unit_title.slice(0, 15)}...] ${ws.category_name}` : 'Unassigned'}

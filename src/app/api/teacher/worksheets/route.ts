@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch worksheets with category details
     const worksheets = db.prepare(`
-      SELECT w.id, w.title, w.tier, w.category_id, w.questions_json, w.created_at,
+      SELECT w.id, w.title, w.tier, w.category_id, w.questions_json, w.created_at, w.badge_emoji,
              c.name as category_name, u.title as unit_title
       FROM worksheets w
       LEFT JOIN categories c ON w.category_id = c.id
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized: Teacher or Admin access required' }, { status: 403 });
     }
 
-    const { id, title, categoryId, tier, questions } = await request.json();
+    const { id, title, categoryId, tier, questions, badgeEmoji } = await request.json();
 
     if (!title || !categoryId || !tier || !questions || !Array.isArray(questions)) {
       return NextResponse.json({ error: 'Missing or invalid parameters' }, { status: 400 });
@@ -94,15 +94,15 @@ export async function POST(request: NextRequest) {
       }
 
       // Update
-      db.prepare('UPDATE worksheets SET title = ?, category_id = ?, tier = ?, questions_json = ? WHERE id = ?')
-        .run(title, categoryId, tier, questionsJson, id);
+      db.prepare('UPDATE worksheets SET title = ?, category_id = ?, tier = ?, questions_json = ?, badge_emoji = ? WHERE id = ?')
+        .run(title, categoryId, tier, questionsJson, badgeEmoji || '🥇', id);
 
       return NextResponse.json({ success: true, id });
     } else {
       // Create new
       const newId = crypto.randomUUID();
-      db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json) VALUES (?, ?, ?, ?, ?)')
-        .run(newId, categoryId, title, tier, questionsJson);
+      db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json, badge_emoji) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(newId, categoryId, title, tier, questionsJson, badgeEmoji || '🥇');
 
       return NextResponse.json({ success: true, id: newId });
     }

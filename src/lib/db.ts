@@ -34,7 +34,11 @@ function initDb() {
       db.prepare('SELECT password_salt FROM users LIMIT 1').get();
     } catch (e) {
       console.log('Migrating: Adding password_salt column to users table...');
-      db.exec('ALTER TABLE users ADD COLUMN password_salt TEXT');
+      try {
+        db.exec('ALTER TABLE users ADD COLUMN password_salt TEXT');
+      } catch (err: any) {
+        if (!err.message.includes('duplicate column name')) throw err;
+      }
     }
 
     try {
@@ -48,6 +52,17 @@ function initDb() {
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
       `);
+    }
+
+    try {
+      db.prepare('SELECT badge_emoji FROM worksheets LIMIT 1').get();
+    } catch (e) {
+      console.log('Migrating: Adding badge_emoji column to worksheets table...');
+      try {
+        db.exec("ALTER TABLE worksheets ADD COLUMN badge_emoji TEXT DEFAULT '🥇'");
+      } catch (err: any) {
+        if (!err.message.includes('duplicate column name')) throw err;
+      }
     }
 
     // 1.6 Legacy Account Invalidation Migration
