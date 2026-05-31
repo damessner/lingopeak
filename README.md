@@ -6,7 +6,7 @@
 
 LingoPeak is a gamified, self-hosted English as a Second Language (ESL) learning platform custom-tailored for school environments (~400 students) and optimized for iPad Progressive Web Apps (PWAs).
 
-It is designed to run with **zero external database dependencies**, utilizing an embedded, high-performance SQLite engine, and features an integrated **AI Writing Coach**, **click-to-define Book Club**, **Hermes AI Tutor**, **AI-driven Teacher dashboards**, and a full-featured **Worksheet Builder** with AI generation.
+It is designed to run with **zero external database dependencies**, utilizing an embedded, high-performance SQLite engine, and features an integrated **Socratic AI Learning Coach**, **AI Writing Coach**, **click-to-define Book Club**, **AI-driven Teacher dashboards**, and a full-featured **Worksheet Builder** with AI generation.
 
 Built with 💻 and 💜 for educators and pupils.
 
@@ -19,7 +19,7 @@ Built with 💻 and 💜 for educators and pupils.
                                   │
          ┌────────────────────────┼────────────────────────┐
          ▼                        ▼                        ▼
-[ 📝 Syllabus Units ]    [ 📚 Book Club Library ]  [ 🤖 AI Writing Coach ]
+[ 📝 Syllabus Units ]    [ 📚 Book Club Library ]  [ ✍️ AI Writing Coach ]
   Explorer (Easy)          Chapter 1 (Basic)         Draft Essay Workspace
   Voyager (Medium)         Chapter 2 (Interm.)       Formative Inline Hints
   Challenger (Hard)        Tap-to-Define Token       Criteria Evaluations
@@ -27,10 +27,10 @@ Built with 💻 and 💜 for educators and pupils.
 
          ┌────────────────────────┼────────────────────────┐
          ▼                        ▼                        ▼
-[ 🤖 Hermes AI Tutor ]   [ 🏆 Achievements ]     [ 👤 Profile & Settings ]
-  Persistent Chat          Badge Showcase           Avatar & Preferences
-  Context-Aware Help       Progress Timeline        Class Roster View
-  Pronunciation Guides     Streak Tracking          Password Management
+[ 🤖 Coach (AI Tutor) ]  [ 🏆 Achievements ]     [ 👤 Profile & Settings ]
+  Socratic Guidance        Badge Showcase           Avatar & Preferences
+  Persistent Memory        Progress Timeline        Class Roster View
+  Spaced Repetition        Streak Tracking          Password Management
 ```
 
 ---
@@ -65,12 +65,19 @@ A full-featured, modular standalone builder for creating custom worksheets:
 - **Unit tests** — 11 test cases across all 10 question types
 - **Keyboard shortcuts** — Ctrl+S/Ctrl+Enter (save), Ctrl+Alt+N (new question)
 
-### 🤖 3. Hermes AI Tutor
-A conversational AI tutor with persistent memory and curriculum awareness:
-- **Context-aware help** — the tutor queries the student's recent worksheet failures and mastery levels, weaving targeted review into natural conversation
-- **Persistent chat history** — last 15 messages loaded on mount, full conversation survives page reloads
-- **Pronunciation guides** — uppercase syllable stress markers (e.g. `de-VEL-op`, `pho-to-GRAPH-ic`) + browser Web Speech TTS playback
-- **Reset chat** — clears history from both UI and database
+### 🤖 3. Coach — Socratic AI Learning Coach
+A Socratic AI tutor that never gives direct answers — it guides students through reasoning with hints, questions, and scaffolding:
+
+- **🧠 Persistent Memory** — remembers each student's goals, weak areas, and name across sessions via hidden `MEMORY_UPDATE` tags embedded in AI replies
+- **📊 Context-Aware Prompting** — injects recent worksheet failures and category mastery levels into every conversation, weaving targeted review into natural dialogue
+- **🎙️ Voice Input & TTS** — browser Speech-to-Text microphone button + Speech Synthesis playback (0.85x speed for ESL learners)
+- **🔊 Pronunciation Guides** — syllable stress markers in responses (e.g. `de-VEL-op`, `pho-to-GRAPH-ic`)
+- **📈 Dynamic Scaffolding** — automatically detects student level from average scores and adjusts hint depth (MINIMAL / MODERATE / MAXIMUM support)
+- **🔄 Spaced Repetition** — background cron daemon scans for weak areas (<60% score, >3 days since review) and sends Socratic review prompts to the student's chat
+- **📝 Agentic Practice Worksheets** — Coach can silently generate a personalized practice worksheet via `<!--CREATE_PRACTICE:{}-->` tag, rendered as a clickable link in chat
+- **❓ Worksheet Help Drawer** — floating "Ask Coach" button on every worksheet opens a slide-over Socratic assistant pre-seeded with the current question
+- **💬 Persistent Chat History** — last 15 messages loaded on mount, conversation survives page reloads, full reset available
+- **🤖 AI Coach Label** — clearly marked as AI in the UI
 
 ### 📚 4. Progressive Book Club Library
 - **Sequential Scaffolding**: Difficulty scales chapter-by-chapter.
@@ -83,7 +90,7 @@ A conversational AI tutor with persistent memory and curriculum awareness:
 - **Revision History Logs**: Teachers can review the entire drafting timeline (Draft 1 → AI hints → Draft 2 → AI evaluation) to monitor progress.
 
 ### 🥇 6. AI "Summit" Finisher
-Completing the Explorer, Voyager, and Challenger worksheets unlocks **The Summit**. The database compiles the student's historical errors and calls the Gemini/OpenCode Zen API to generate a personalized practice worksheet. Passing awards the student the category's Gold Badge.
+Completing the Explorer, Voyager, and Challenger worksheets unlocks **The Summit**. The database compiles the student's historical errors and calls the AI API to generate a personalized practice worksheet. Passing awards the student the category's Gold Badge.
 
 ### 📊 7. Teacher Dashboards & Class Revision Planner
 - **Mastery Heatmaps**: Renders student mastery averages colored by grade (Grey = Unstarted, Red = <60%, Yellow = 60–79%, Green = ≥80%).
@@ -91,6 +98,10 @@ Completing the Explorer, Voyager, and Challenger worksheets unlocks **The Summit
 - **AI Class Review Planner**: Analyzes collective class mistakes and generates a custom 30-minute lesson warmup, board activity, and review questions.
 - **Printable Reports**: Style sheets override headers, footers, and dashboard blocks to print progress reports to clean A4 PDFs.
 - **Student View**: Teachers can preview the student experience with a single click.
+- **Class CRUD**: Create, rename, and delete classes with student roster reassignment.
+- **Staff-to-Class Assignment**: Bind teachers and admins to specific classes.
+- **Live Notifications**: Bell indicator polling worksheet completions and coach alerts.
+- **MS Teams Integration**: Incoming Webhook connector for struggle alerts and weekly class reports.
 
 ---
 
@@ -103,24 +114,34 @@ lingopeak/
 │   ├── setup.sh                   # Container setup (installs Node, PM2, app)
 │   ├── update.sh                  # Git fetch, package audits, PM2 hot reloading
 │   └── rollback.sh                # Reverts container state to specific commits
-├── public/                        # Static media & manifest assets
-│   └── uploads/                   # Teacher-uploaded audios, pictures, videos
+├── public/
+│   ├── uploads/                   # Teacher-uploaded audios, pictures, videos
+│   └── icons/                     # PWA manifest icons
+├── scripts/
+│   └── cron-coach.ts              # Background spaced repetition + Teams alerts daemon
 ├── src/
 │   ├── app/
-│   │   ├── api/                   # 19 API routes (auth, attempts, AI, teacher, admin)
-│   │   ├── student/               # Dashboard, units, worksheets, book-club, writing, tutor
+│   │   ├── api/                   # 25+ API routes (auth, attempts, AI, tutor, teacher, admin)
+│   │   │   ├── student/           # Attempts, writing, tutor, worksheet help, practice
+│   │   │   ├── teacher/           # Worksheets, roster, class-revision, teams webhook, hermes memory
+│   │   │   └── admin/             # Backup, curriculum generation
+│   │   ├── student/               # Dashboard, units, worksheets, book-club, writing, tutor, profile
 │   │   ├── teacher/               # Dashboard, reports, worksheet builder, approvals
 │   │   └── register/              # Student & teacher self-registration
 │   ├── components/
-│   │   ├── worksheets/            # 10 student-facing question widgets
-│   │   ├── teacher/               # Worksheet builder (modular), teacher UI
-│   │   │   └── builder/           # 10 editors, AI panel, templates, validation, tests
+│   │   ├── worksheets/            # 10 student-facing question widgets + WorksheetContainer
+│   │   ├── teacher/               # WorksheetBuilder, TeamsSettingsPanel
+│   │   │   └── builder/           # 10 editors, AI panel, templates, validation, tests, hooks
+│   │   ├── NotificationBell.tsx   # Live notification bell component
 │   │   └── ui/                    # Shared UI primitives
 │   └── lib/
 │       ├── db.ts                  # SQLite connection, migrations, seed data (15 units)
-│       ├── schema.sql             # 12 tables: users, units, worksheets, attempts, badges, etc.
+│       ├── schema.sql             # 14 tables: users, units, worksheets, attempts, badges,
+│       │                          #   tutor_messages, student_memories, notifications, etc.
 │       ├── session.ts             # HMAC-signed cookie session
 │       ├── aiService.ts           # AI integrations (Gemini & OpenCode Zen)
+│       ├── hermesMemory.ts        # Per-student persistent memory read/write + tag parser
+│       ├── teamsNotify.ts         # MS Teams Adaptive Card sender
 │       ├── gridGenerators.ts      # Crossword & word search grid auto-generation
 │       └── worksheet-types.ts     # Discriminated union types (10 question variants)
 ├── task.md                        # Project roadmap & progress tracker
@@ -136,14 +157,16 @@ lingopeak/
 |------|--------|
 | **Syllabus Engine** (10 widgets, student player) | ✅ Complete |
 | **Worksheet Builder** (Phases 1, 2, 2.5) | ✅ Complete — hardened with tests, AI, autosave, undo/redo |
+| **Coach (Socratic AI Tutor)** — persistent memory, spaced repetition, voice, worksheet help, scaffolding, practice generation | ✅ Complete |
 | **Book Club** | ✅ Complete — 1 seeded book with chapters |
 | **AI Writing Coach** | ✅ Complete |
 | **Summit AI Generator** | ✅ Complete |
-| **Teacher Dashboards** | ✅ Complete — heatmap, struggles, AI review, reports |
-| **Hermes AI Tutor** | ✅ Complete — persistent chat, context-aware, pronunciation |
+| **Teacher Dashboards** | ✅ Complete — heatmap, struggles, AI review, reports, class CRUD, Teams |
+| **Student Experience** (profile, badges, timeline, avatar) | ✅ Complete |
+| **Teacher Admin** (class CRUD, roster, staff assignment, notifications) | ✅ Complete |
 | **Content Population** (Units 2–15) | ⚠️ Not started — 14/15 units are empty shells |
-| **Student Experience** (profile, badges, timeline) | 🔄 In progress |
-| **Teacher Admin** (class CRUD, roster management) | 🔄 In progress |
+| **MS Teams Integration** (webhook, struggle alerts, weekly reports) | ✅ Complete |
+| **Security Hardening** (PBKDF2, rate limiting, CSRF, session validation, upload sanitization) | ✅ Complete |
 
 **Curriculum**: 15 units aligned to MORE! 1 textbook. Unit 1 "Time for School" is fully populated (15 worksheets × 3 tiers). Units 2–15 await content seeding.
 
@@ -182,23 +205,41 @@ PORT=3000
 NODE_ENV=production
 DATABASE_URL="file:./dev.db"
 
-# AI Provider: GEMINI or OPENCODE_ZEN
-AI_PROVIDER=GEMINI
-AI_API_KEY="your_gemini_api_key_here"
+# Public URL for Teams action links (set to your production domain)
+NEXT_PUBLIC_APP_URL=http://192.168.178.159:3000
 
-# For OpenCode Zen (alternative provider):
-# AI_PROVIDER=OPENCODE_ZEN
-# AI_API_KEY=your_opencode_zen_key_here
-# AI_ENDPOINT_URL=https://api.opencode.ai/v1/chat/completions
-# AI_MODEL_NAME=zen-model
+# AI Provider: OPENCODE_ZEN (recommended) or GEMINI
+AI_PROVIDER=OPENCODE_ZEN
+AI_API_KEY="your_opencode_zen_api_key_here"
+AI_MODEL_NAME=deepseek-v4-flash
 
-# Session signing secret
-SESSION_SECRET="random_hex_string"
+# Alternative: Google Gemini
+# AI_PROVIDER=GEMINI
+# AI_API_KEY="your_gemini_api_key_here"
+# AI_MODEL_NAME=gemini-2.5-flash
+
+# Session signing secret (min 32 characters)
+SESSION_SECRET="replace_with_random_hex_string"
+
+# Database path for standalone cron-coach daemon (optional)
+DATABASE_PATH=dev.db
 ```
 
 Reload PM2 after making environment changes:
 ```bash
 pm2 reload lingopeak
+```
+
+### Background Cron (Coach Spaced Repetition)
+
+The spaced repetition daemon runs outside Next.js. Schedule it via Windows Task Scheduler or cron:
+
+```bash
+# Daily coaching (Mon–Fri 08:00)
+npx tsx scripts/cron-coach.ts
+
+# Weekly class report (Fri 17:00)
+npx tsx scripts/cron-coach.ts weekly
 ```
 
 ---
@@ -214,11 +255,12 @@ pm2 reload lingopeak
    ```bash
    npm install
    ```
-3. Start the dev server:
+3. Copy `.env` and fill in your AI API key
+4. Start the dev server:
    ```bash
    npm run dev
    ```
-4. Access the workspace at `http://localhost:3000`.
+5. Access the workspace at `http://localhost:3000`.
 
 ### Running Tests
 ```bash
@@ -257,4 +299,6 @@ LingoPeak is built using:
 - **canvas-confetti** for milestoning animations
 - **Tailwind CSS** for responsive layout design
 - **Web Speech API** for client-side Text-to-Speech playback
+- **Web Speech Recognition** for voice input
 - **Node.js built-in test runner** for validation unit tests
+- **DeepSeek V4 Flash** via OpenCode Zen (default AI model)

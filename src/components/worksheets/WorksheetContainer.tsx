@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import confetti from 'canvas-confetti';
 
@@ -43,7 +43,69 @@ export default function WorksheetContainer({ worksheet, studentId = '', previewM
   const [finalScore, setFinalScore] = useState(0);
   const [monologueSpeaking, setMonologueSpeaking] = useState(false);
 
+  // Coach Socratic helper state
+  const [isCoachOpen, setIsCoachOpen] = useState(false);
+  const [drawerInput, setDrawerInput] = useState('');
+  const [coachMessages, setCoachMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  const [coachLoading, setCoachLoading] = useState(false);
+  const drawerChatEndRef = useRef<HTMLDivElement>(null);
+
   const activeQuestion = questions[currentIdx];
+
+  // Auto-scroll drawer chat
+  useEffect(() => {
+    if (isCoachOpen) {
+      drawerChatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [coachMessages, coachLoading, isCoachOpen]);
+
+  // Synchronise or seed Coach messages on opening drawer or changing questions
+  useEffect(() => {
+    if (isCoachOpen && activeQuestion) {
+      setCoachMessages([
+        {
+          role: 'assistant',
+          content: `Hi! I'm Coach. I see you are on question ${currentIdx + 1} (${activeQuestion.type.replace(/_/g, ' ')}). How can I help you think through this question without giving you the answer?`
+        }
+      ]);
+    }
+  }, [currentIdx, isCoachOpen]);
+
+  const handleSendHelpQuery = async (queryText: string) => {
+    if (!queryText.trim() || coachLoading) return;
+    const userMsg = { role: 'user' as const, content: queryText.trim() };
+    const updatedHistory = [...coachMessages, userMsg];
+    setCoachMessages(updatedHistory);
+    setDrawerInput('');
+    setCoachLoading(true);
+
+    try {
+      const res = await fetch('/api/student/worksheet/help', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          worksheetId: worksheet.id,
+          questionIndex: currentIdx,
+          studentMessage: queryText.trim(),
+          history: coachMessages.filter(m => !m.content.startsWith("Hi! I'm Coach. I see you are on question"))
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setCoachMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
+      } else {
+        throw new Error('Failed to fetch Socratic hint');
+      }
+    } catch (err) {
+      setCoachMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: '⚠️ Sorry, I could not generate a hint. Please try again.' }
+      ]);
+    } finally {
+      setCoachLoading(false);
+    }
+  };
 
   const handleAnswerChange = (questionId: string, val: any) => {
     setAnswers({
@@ -412,6 +474,116 @@ export default function WorksheetContainer({ worksheet, studentId = '', previewM
           </button>
         )}
       </div>
+      {/* Floating Ask Coach Button */}
+      {!isCoachOpen && !completed && (
+        <button
+          type="button"
+          onClick={() => setIsCoachOpen(true)}
+          className="absolute bottom-6 right-6 sm:bottom-8 sm:right-8 bg-indigo-650 hover:bg-indigo-600 text-white font-extrabold text-xs px-4 py-2.5 rounded-2xl border border-indigo-500/20 shadow-lg shadow-indigo-600/10 hover:scale-102 transition-all flex items-center gap-1.5 cursor-pointer z-40"
+        >
+          <span>❓ Ask Coach</span>
+        </button>
+      )}
+
+      {/* Slide-over Socratic Coach Panel */}
+      <div
+        className={`fixed top-0 right-0 h-full w-full sm:w-[400px] bg-slate-950/95 backdrop-blur-2xl border-l border-slate-900 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col ${
+          isCoachOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        {/* Panel Header */}
+        <div className="p-4 border-b border-slate-900 flex items-center justify-between bg-slate-950/60 flex-shrink-0">
+          <div className="flex items-center gap-2.5">
+            <span className="text-2xl">🤖</span>
+            <div>
+              <h3 className="font-extrabold text-sm text-white">Coach</h3>
+              <p className="text-[10px] text-slate-400 font-bold">🤖 AI Coach (Worksheet Help)</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsCoachOpen(false)}
+            className="text-slate-400 hover:text-white font-bold text-xs cursor-pointer px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl transition-colors"
+          >
+            ✕ Close
+          </button>
+        </div>
+
+        {/* Message bubble list */}
+        <div className="flex-grow p-4 overflow-y-auto space-y-4 bg-slate-950/30">
+          {coachMessages.map((m, idx) => (
+            <div key={idx} className={`flex gap-3 max-w-[85%] ${m.role === 'user' ? 'ml-auto flex-row-reverse' : ''}`}>
+              <div className="text-xl flex-shrink-0 select-none">
+                {m.role === 'user' ? '👤' : '🤖'}
+              </div>
+              <div className={`p-3 rounded-2xl text-xs font-medium leading-relaxed whitespace-pre-wrap border ${
+                m.role === 'user'
+                  ? 'bg-indigo-650 border-indigo-500/20 text-white rounded-tr-none'
+                  : 'bg-slate-900 border-slate-800/80 text-slate-200 rounded-tl-none'
+              }`}>
+                {m.content}
+              </div>
+            </div>
+          ))}
+          {coachLoading && (
+            <div className="flex gap-3 max-w-[85%]">
+              <div className="text-xl flex-shrink-0 select-none">🤖</div>
+              <div className="p-3 bg-slate-900 border border-slate-800 rounded-2xl rounded-tl-none flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+            </div>
+          )}
+          <div ref={drawerChatEndRef} />
+        </div>
+
+        {/* Quick helper message triggers */}
+        <div className="p-3 bg-slate-950/40 border-t border-slate-900/60 flex flex-wrap gap-2 flex-shrink-0 select-none">
+          <button
+            type="button"
+            onClick={() => handleSendHelpQuery("I'm stuck. Can you give me a hint?")}
+            className="text-[10px] font-bold bg-slate-900 hover:bg-slate-850 text-indigo-300 border border-slate-800 rounded-xl px-3 py-1.5 cursor-pointer transition-colors"
+          >
+            ❓ Hint please
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSendHelpQuery("Can you explain the grammar rule behind this?")}
+            className="text-[10px] font-bold bg-slate-900 hover:bg-slate-850 text-indigo-300 border border-slate-800 rounded-xl px-3 py-1.5 cursor-pointer transition-colors"
+          >
+            📖 Explain the rule
+          </button>
+        </div>
+
+        {/* Form composer */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (drawerInput.trim()) {
+              handleSendHelpQuery(drawerInput);
+            }
+          }}
+          className="p-3 border-t border-slate-900 bg-slate-950 flex gap-2 items-center flex-shrink-0"
+        >
+          <input
+            type="text"
+            value={drawerInput}
+            onChange={(e) => setDrawerInput(e.target.value)}
+            placeholder="Ask Coach for a hint..."
+            disabled={coachLoading}
+            className="flex-grow bg-slate-900 border border-slate-850 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-indigo-500 placeholder-slate-500"
+          />
+          <button
+            type="submit"
+            disabled={coachLoading || !drawerInput.trim()}
+            className="bg-indigo-650 hover:bg-indigo-600 disabled:bg-slate-900 text-white disabled:text-slate-600 px-4 py-2.5 rounded-xl text-xs font-extrabold border border-indigo-500/20 transition-all"
+          >
+            Ask
+          </button>
+        </form>
+      </div>
+
     </div>
   );
 }

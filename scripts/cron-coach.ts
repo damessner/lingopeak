@@ -79,34 +79,101 @@ interface Teacher {
 // ── Per-student coaching logic ───────────────────────────────────────────────
 
 async function processStudent(student: Student): Promise<void> {
-  // Get recent struggles (last 14 days, avg < 70)
-  const struggles = db.prepare(`
-    SELECT c.name as category_name, AVG(a.score) as avg_score, COUNT(*) as attempt_count
+  // 1. Fetch category review dates from memories
+  const memoriesRows = db.prepare("SELECT key, value FROM student_memories WHERE student_id = ? AND key LIKE 'last_reviewed_%'")
+    .all(student.id) as Array<{ key: string; value: string }>;
+  const lastReviewed: Record<string, string> = {};
+  memoriesRows.forEach(r => {
+    const category = r.key.replace('last_reviewed_', '');
+    lastReviewed[category] = r.value;
+  });
+
+  // 2. Fetch student category scores
+  const categoryScores = db.prepare(`
+    SELECT c.name as category_name, AVG(a.score) as avg_score, MIN(a.score) as min_score, COUNT(*) as attempt_count
     FROM attempts a
     JOIN worksheets w ON a.worksheet_id = w.id
     JOIN categories c ON w.category_id = c.id
     WHERE a.student_id = ?
-      AND a.completed_at >= datetime('now', '-14 days')
     GROUP BY c.name
-    HAVING avg_score < 70
-    ORDER BY avg_score ASC
-    LIMIT 2
-  `).all(student.id) as Struggle[];
+  `).all(student.id) as Array<{ category_name: string; avg_score: number; min_score: number; attempt_count: number }>;
 
-  if (struggles.length === 0) {
-    console.log(`  [${student.username}] No struggles detected — skipping.`);
+  const today = new Date();
+  const getDaysSince = (dateStr?: string) => {
+    if (!dateStr) return 999; // Never reviewed
+    const diffTime = Math.abs(today.getTime() - new Date(dateStr).getTime());
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  let selectedCategory: string | null = null;
+  let reviewPrompt = '';
+  let categoryLabel = '';
+
+  // Rule A: score < 60% and last_reviewed > 3 days ago -> urgent remedial check
+  for (const cat of categoryScores) {
+    const catNameLower = cat.category_name.toLowerCase();
+    const daysSince = getDaysSince(lastReviewed[catNameLower]);
+    if (cat.min_score < 60 && daysSince > 3) {
+      selectedCategory = cat.category_name;
+      categoryLabel = cat.category_name;
+      reviewPrompt = `You are Coach, a friendly, encouraging, and Socratic AI ESL tutor. 
+Write a short, engaging review prompt (2-3 sentences) for student "${student.username}" to practice "${cat.category_name}".
+The student previously struggled on a worksheet here (scoring under 60%), and it has been ${daysSince} days since their last practice.
+Give them a quick, easy micro-quiz or review question inline to check their understanding (e.g. "Let's check that grammar point again. Fill in: She ___ (go) to school yesterday.").
+Encourage them to reply directly in chat. Do NOT mention scores or statistics.`;
+      break;
+    }
+  }
+
+  // Rule B: average < 70% and last_reviewed > 7 days ago -> standard review check
+  if (!selectedCategory) {
+    for (const cat of categoryScores) {
+      const catNameLower = cat.category_name.toLowerCase();
+      const daysSince = getDaysSince(lastReviewed[catNameLower]);
+      if (cat.avg_score < 70 && daysSince > 7) {
+        selectedCategory = cat.category_name;
+        categoryLabel = cat.category_name;
+        reviewPrompt = `You are Coach, a friendly, encouraging, and Socratic AI ESL tutor.
+Write a short, encouraging spaced repetition prompt (2-3 sentences) for student "${student.username}" for the category "${cat.category_name}".
+It has been ${daysSince} days since they last reviewed this category, and they struggled here historically.
+Ask them a quick review question to refresh their memory (e.g. "It's been a while since we practiced vocabulary. Can you name 3 animals you learned in Unit 2?").
+Encourage them to reply inline. Do NOT mention scores or statistics.`;
+        break;
+      }
+    }
+  }
+
+  // Fallback Rule C: general struggles if neither of the above triggered but there are struggles
+  if (!selectedCategory) {
+    const struggles = db.prepare(`
+      SELECT c.name as category_name, AVG(a.score) as avg_score, COUNT(*) as attempt_count
+      FROM attempts a
+      JOIN worksheets w ON a.worksheet_id = w.id
+      JOIN categories c ON w.category_id = c.id
+      WHERE a.student_id = ?
+        AND a.completed_at >= datetime('now', '-14 days')
+      GROUP BY c.name
+      HAVING avg_score < 70
+      ORDER BY avg_score ASC
+      LIMIT 1
+    `).get(student.id) as { category_name: string; avg_score: number; attempt_count: number } | undefined;
+
+    if (struggles) {
+      selectedCategory = struggles.category_name;
+      categoryLabel = struggles.category_name;
+      reviewPrompt = `You are Coach, a friendly, encouraging, and Socratic AI ESL tutor.
+Student "${student.username}" is struggling with "${struggles.category_name}" (avg score: ${Math.round(struggles.avg_score)}% over ${struggles.attempt_count} attempts).
+Write a short, encouraging coaching tip (2-3 sentences) they will see in their tutor chat when they log in today.
+Make it specific to the topic, practical, and warm. Do NOT mention scores or statistics to the student.`;
+    }
+  }
+
+  if (!selectedCategory || !reviewPrompt) {
+    console.log(`  [${student.username}] No struggles or scheduled reviews needed — skipping.`);
     return;
   }
 
-  const topStruggle = struggles[0];
-
-  // Generate a personalised coaching tip
-  const prompt = `You are Hermes, a friendly ESL tutor on LingoPeak. 
-Student "${student.username}" is struggling with "${topStruggle.category_name}" (avg score: ${Math.round(topStruggle.avg_score)}% over ${topStruggle.attempt_count} attempts).
-Write a short, encouraging coaching tip (2-3 sentences) they will see in their tutor chat when they log in today.
-Make it specific to the topic, practical, and warm. Do NOT mention scores or statistics to the student.`;
-
-  const tip = await callAI(prompt);
+  const tip = await callAI(reviewPrompt);
   if (!tip.trim()) return;
 
   // Save to tutor_messages so it surfaces in the chat UI
@@ -116,7 +183,16 @@ Make it specific to the topic, practical, and warm. Do NOT mention scores or sta
     VALUES (?, ?, 'assistant', ?, 'cron', CURRENT_TIMESTAMP)
   `).run(msgId, student.id, tip.trim());
 
-  console.log(`  [${student.username}] Coaching tip saved for "${topStruggle.category_name}".`);
+  // Update memory review date
+  const categoryKey = `last_reviewed_${selectedCategory.toLowerCase()}`;
+  const todayStr = today.toISOString().split('T')[0];
+  db.prepare(`
+    INSERT INTO student_memories (student_id, key, value, updated_at)
+    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(student_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `).run(student.id, categoryKey, todayStr);
+
+  console.log(`  [${student.username}] Coaching tip saved for "${categoryLabel}".`);
 
   // Alert teacher via MS Teams if they have a webhook
   if (student.class_id) {
@@ -128,12 +204,16 @@ Make it specific to the topic, practical, and warm. Do NOT mention scores or sta
     `).get(student.class_id) as Teacher | undefined;
 
     if (teacher?.teams_webhook_url) {
+      // Find average score for the alert
+      const avgScore = Math.round(
+        categoryScores.find(cs => cs.category_name === selectedCategory)?.avg_score ?? 60
+      );
       await notifyTeacherStruggle({
         webhookUrl: teacher.teams_webhook_url,
         teacherName: teacher.username,
         studentName: student.username,
-        topicName: topStruggle.category_name,
-        score: Math.round(topStruggle.avg_score),
+        topicName: categoryLabel,
+        score: avgScore,
         platformUrl: process.env.NEXT_PUBLIC_APP_URL
       });
       console.log(`  [${student.username}] Teacher "${teacher.username}" notified via MS Teams.`);

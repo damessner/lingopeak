@@ -61,6 +61,21 @@ export async function POST(request: NextRequest) {
       return { badgeAwarded, worksheet };
     })();
 
+    // Write last_reviewed_[category] memory entry
+    if (result.worksheet?.category_name) {
+      try {
+        const categoryKey = `last_reviewed_${result.worksheet.category_name.toLowerCase()}`;
+        const todayStr = new Date().toISOString().split('T')[0];
+        db.prepare(`
+          INSERT INTO student_memories (student_id, key, value, updated_at)
+          VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+          ON CONFLICT(student_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+        `).run(studentId, categoryKey, todayStr);
+      } catch (err) {
+        console.error('Failed to update last_reviewed memory:', err);
+      }
+    }
+
     // Notify staff of student worksheet completion
     try {
       const wsTitle = result.worksheet?.title || 'a worksheet';

@@ -69,6 +69,33 @@ export async function POST(req: Request) {
       GROUP BY c.name
     `).all(session.userId) as Array<{ category_name: string; avg_score: number }>;
 
+    // Calculate student average score across all attempts
+    const avgScoreRow = db.prepare('SELECT AVG(score) as avg FROM attempts WHERE student_id = ?')
+      .get(session.userId) as { avg: number | null };
+    const overallAvgScore = avgScoreRow.avg !== null ? Math.round(avgScoreRow.avg) : null;
+
+    let scaffoldingInstruction = '';
+    let dbLevel = 'MODERATE';
+    if (overallAvgScore !== null) {
+      if (overallAvgScore > 80) {
+        dbLevel = 'MINIMAL';
+        scaffoldingInstruction = `\n[SCAFFOLDING LEVEL: MINIMAL SUPPORT (Student avg score is ${overallAvgScore}%)]\n- Give very minimal hints, pushing for high precision and correct terminology.\n- Encourage them to self-correct with light, brief prompts rather than breaking down sentences.`;
+      } else if (overallAvgScore >= 60) {
+        dbLevel = 'MODERATE';
+        scaffoldingInstruction = `\n[SCAFFOLDING LEVEL: MODERATE SUPPORT (Student avg score is ${overallAvgScore}%)]\n- Guide them when they make mistakes, explaining *why* a grammatical structure is close but not quite right.\n- Confirm their understanding at each step before moving on.`;
+      } else {
+        dbLevel = 'MAXIMUM';
+        scaffoldingInstruction = `\n[SCAFFOLDING LEVEL: MAXIMUM SUPPORT (Student avg score is ${overallAvgScore}%)]\n- Provide maximum scaffolding. Break down complex rules or sentences word-by-word.\n- Give extremely simple explanations and highly supportive, easy-to-understand hints.`;
+      }
+
+      // Persist the scaffolding level key in student memory
+      db.prepare(`
+        INSERT INTO student_memories (student_id, key, value, updated_at)
+        VALUES (?, 'scaffolding_level', ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(student_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+      `).run(session.userId, dbLevel);
+    }
+
     let struggleContext = '';
     if (struggles.length > 0) {
       struggleContext = `\n\nRecent Student Gaps & Mistakes (Help the student practice these topics contextually):\n` +
@@ -83,28 +110,101 @@ export async function POST(req: Request) {
     }
 
     // ── Build System Prompt ─────────────────────────────────────────────────
-    const systemPrompt = `You are Hermes, a friendly, highly persistent, and encouraging AI ESL (English as a Second Language) Tutor on the LingoPeak platform.
-Your goal is to help the student learn English naturally and dynamically.
-Follow these guidelines:
-- Communicate in clear, supportive, and accessible English matching their student status.
-- Use scaffolding: ask encouraging follow-up questions and prompt them to correct their own typos or grammar slips rather than giving the answer away instantly.
-- Speak in a friendly, conversational tone. Keep responses relatively brief (1-3 paragraphs) to avoid overwhelming the learner.
-- Correct grammar or spelling mistakes politely if you notice them in the student's text.
+    const systemPrompt = `You are Coach, a friendly, highly persistent, encouraging, and Socratic AI ESL (English as a Second Language) Coach on the LingoPeak platform.
+Your goal is to help the student learn English naturally, dynamically, and through Socratic reasoning.
+CRITICAL: You NEVER give direct answers.
+Rules:
+- If a student asks "What's the past tense of go?" → Ask "What do you remember about irregular verbs?"
+- If they answer wrong → "Close! Think about words that change completely, like sing→sang."
+- If they're stuck → Give a hint about the rule, never the word: "Go is an irregular verb. It doesn't follow the -ed rule."
+- If they get it right → "Exactly! Now try it in a sentence: Yesterday, I ___ to the park."
+- Use the student's struggle data to pick examples from categories they've failed before.
+- When the student asks for help on a specific worksheet question: reference the question type and guide them through the reasoning without revealing the answer.
+- Communicate in clear, supportive, and accessible English matching their student status and scaffolding level.
+- Keep responses relatively brief (1-3 paragraphs) to avoid overwhelming the learner.
+- Correct grammar or spelling mistakes politely if you notice them in the student's text, guiding them to self-correct.
 - Provide word stress guides in capital letters inside brackets for multi-syllabic vocabulary words that may be difficult (e.g., de-VEL-op, pho-to-GRAPH-ic, par-TIC-u-lar) to guide the student's pronunciation.
-- When the student shares a personal goal, name, preferred topic, or important fact, embed a <!--MEMORY_UPDATE:{"key":"value"}--> tag at the very end of your reply (hidden from the student). Use snake_case keys like "learning_goal", "name", "weak_area", "last_topic". Never show these tags directly.${struggleContext}${masteryContext}${memoryBlock}`;
+- When the student shares a personal goal, name, preferred topic, or important fact, embed a <!--MEMORY_UPDATE:{"key":"value"}--> tag at the very end of your reply (hidden from the student). Use snake_case keys like "learning_goal", "name", "weak_area", "last_topic". Never show these tags directly.
+- When you want to assign/create a practice worksheet for a student (e.g. because they need more practice on a topic), embed a <!--CREATE_PRACTICE:{"category":"GRAMMAR", "topic":"present perfect"}--> tag in your reply. Note: valid categories are GRAMMAR, VOCABULARY, READING, WRITING, LISTENING.
+${scaffoldingInstruction}${struggleContext}${masteryContext}${memoryBlock}`;
 
     // Format dialogue history
     const formattedHistory = (history || [])
-      .map(m => `${m.role === 'user' ? 'Student' : 'Hermes'}: ${m.content}`)
+      .map(m => `${m.role === 'user' ? 'Student' : 'Coach'}: ${m.content}`)
       .join('\n');
 
-    const promptText = `${systemPrompt}\n\n${formattedHistory}\nStudent: ${message.trim()}\nHermes:`;
+    const promptText = `${systemPrompt}\n\n${formattedHistory}\nStudent: ${message.trim()}\nCoach:`;
 
     // ── Invoke AI ───────────────────────────────────────────────────────────
     const rawReply = await generateCompletion(promptText, false);
 
     // Parse + persist any memory updates hidden in the reply, strip tags from student-visible text
-    const cleanReply = parseAndPersistMemoryUpdates(session.userId, rawReply.trim());
+    let cleanReply = parseAndPersistMemoryUpdates(session.userId, rawReply.trim());
+
+    // Parse + generate any worksheets requested by the AI inline
+    const practicePattern = /<!--CREATE_PRACTICE:(.*?)-->/i;
+    const practiceMatch = practicePattern.exec(cleanReply);
+    if (practiceMatch) {
+      try {
+        const { category, topic } = JSON.parse(practiceMatch[1]);
+        if (category && topic) {
+          const categoryRow = db.prepare('SELECT id FROM categories WHERE name = ? LIMIT 1')
+            .get(category.toUpperCase()) as { id: string } | undefined;
+          if (categoryRow) {
+            const worksheetId = crypto.randomUUID();
+            const count = 3;
+            const generatorPrompt = `You are an expert ESL curriculum designer creating a personalized practice worksheet for LingoPeak.
+Generate exactly ${count} questions about the topic: "${topic.trim()}"
+Question type: multiple_choice
+
+Return ONLY a valid JSON object (no markdown, no explanation) in this format:
+{
+  "worksheetTitle": "...",
+  "instructions": "...",
+  "questions": [
+    {
+      "type": "multiple_choice",
+      "question": "...",
+      "options": ["...", "...", "...", "..."],
+      "correctAnswer": "...",
+      "explanation": "..."
+    }
+  ]
+}
+Return valid JSON only.`;
+            const rawWS = await generateCompletion(generatorPrompt, true);
+            const cleanedWS = rawWS.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+            const parsedWS = JSON.parse(cleanedWS);
+            const normalisedQuestions = (parsedWS.questions ?? []).map((q: any, idx: number) => ({
+              id: `q_practice_${idx}`,
+              type: 'multiple_choice',
+              question: q.question ?? '',
+              options: q.options ?? [],
+              correctAnswer: q.correctAnswer ?? '',
+              explanation: q.explanation ?? ''
+            }));
+
+            db.prepare(`
+              INSERT INTO worksheets (id, category_id, title, tier, questions_json, badge_emoji)
+              VALUES (?, ?, ?, 'SUMMIT', ?, '⚡')
+            `).run(
+              worksheetId,
+              categoryRow.id,
+              parsedWS.worksheetTitle ?? `Practice: ${topic}`,
+              JSON.stringify(normalisedQuestions)
+            );
+
+            const worksheetLink = `[📝 Open Practice Worksheet: ${parsedWS.worksheetTitle ?? topic}](/student/worksheets/${worksheetId})`;
+            cleanReply = cleanReply.replace(practicePattern, `\n\n${worksheetLink}`).trim();
+          } else {
+            cleanReply = cleanReply.replace(practicePattern, '').trim();
+          }
+        }
+      } catch (e) {
+        console.error('Failed to auto-create practice worksheet:', e);
+        cleanReply = cleanReply.replace(practicePattern, '').trim();
+      }
+    }
 
     // Save assistant reply to persistent history
     const assistantMsgId = crypto.randomUUID();

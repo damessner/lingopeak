@@ -40,7 +40,7 @@ export default function StudentTutorClient({
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: `Hi ${sessionUsername}! I'm Hermes, your personal AI ESL Tutor on LingoPeak. ⛰️\n\nI can help you practice English, review your grammar mistakes, or drill vocabulary. What would you like to practice today?`,
+      content: `Hi ${sessionUsername}! I'm Coach, your Socratic AI ESL Coach on LingoPeak. ⛰️\n\nI can help you practice English, review your grammar mistakes, or drill vocabulary. What would you like to practice today?`,
       timestamp: Date.now()
     }
   ]);
@@ -210,7 +210,7 @@ export default function StudentTutorClient({
       setMessages([
         {
           role: 'assistant',
-          content: `Hi ${sessionUsername}! I'm Hermes, your personal AI ESL Tutor on LingoPeak. ⛰️\n\nI can help you practice English, review your grammar mistakes, or drill vocabulary. What would you like to practice today?`,
+          content: `Hi ${sessionUsername}! I'm Coach, your Socratic AI ESL Coach on LingoPeak. ⛰️\n\nI can help you practice English, review your grammar mistakes, or drill vocabulary. What would you like to practice today?`,
           timestamp: Date.now()
         }
       ]);
@@ -341,8 +341,8 @@ export default function StudentTutorClient({
             <div className="flex items-center gap-3">
               <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse" />
               <div>
-                <h3 className="font-extrabold text-sm text-white">Hermes AI Tutor</h3>
-                <p className="text-[10px] text-slate-400 font-bold">Self-hosted study companion</p>
+                <h3 className="font-extrabold text-sm text-white">Coach</h3>
+                <p className="text-[10px] text-slate-400 font-bold">🤖 AI Coach</p>
               </div>
             </div>
 
@@ -419,7 +419,7 @@ export default function StudentTutorClient({
                   <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                   <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                   <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                  <span className="text-[10px] text-slate-400 font-bold ml-1">Hermes is translating...</span>
+                  <span className="text-[10px] text-slate-400 font-bold ml-1">Coach is thinking...</span>
                 </div>
               </div>
             )}
@@ -471,7 +471,7 @@ export default function StudentTutorClient({
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={listening ? '🎙️ Listening… speak now' : `Send message to Hermes...`}
+              placeholder={listening ? '🎙️ Listening… speak now' : `Send message to Coach...`}
               disabled={loading || listening}
               className={`flex-grow bg-slate-950 border rounded-2xl px-4 py-3 text-xs text-slate-200 font-medium outline-none transition-colors ${
                 listening ? 'border-red-500/60 animate-pulse' : 'border-slate-800 focus:border-indigo-500'
@@ -483,7 +483,7 @@ export default function StudentTutorClient({
               type="button"
               onClick={handleMicToggle}
               disabled={loading}
-              title={listening ? 'Stop listening' : 'Speak to Hermes'}
+              title={listening ? 'Stop listening' : 'Speak to Coach'}
               className={`p-3 rounded-2xl font-extrabold text-xs border transition-all ${
                 listening
                   ? 'bg-red-600 border-red-500 text-white shadow-lg shadow-red-500/30 animate-pulse'
