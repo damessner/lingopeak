@@ -16,7 +16,7 @@ const unit1Cats = {
 
 const block2Worksheets = [
   // ==========================================
-  // CATEGORY 1: GRAMMAR (Learning Style: Visual / Auditory & Spelling Rhythms)
+  // CATEGORY 1: GRAMMAR
   // ==========================================
   {
     category_id: unit1Cats.GRAMMAR,
@@ -24,22 +24,22 @@ const block2Worksheets = [
     tier: 'EXPLORER',
     badge_emoji: '🔎',
     questions: [
-      { id: 'g_e2_1', type: 'matching_pairs', question: 'Match uppercase vowel sounds to lowercase.', pairs: { 'A': 'a', 'E': 'e', 'I': 'i', 'O': 'o', 'U': 'u' } },
-      { id: 'g_e2_2', type: 'matching_pairs', question: 'Match letters with their alphabetic next neighbors.', pairs: { 'X': 'y', 'B': 'c', 'H': 'i', 'O': 'p', 'V': 'w' } },
-      { id: 'g_e2_3', type: 'multiple_choice', question: 'Which letter sounds like the word "see"?', options: ['C', 'S', 'B', 'Z'], answer: 'C' },
-      { id: 'g_e2_4', type: 'multiple_choice', question: 'Which letter sounds like the word "why"?', options: ['Y', 'W', 'I', 'J'], answer: 'Y' },
-      { id: 'g_e2_5', type: 'fill_in_gap', question: 'Write the plural form (adding -s).', text: 'One pencil, three [pencils]. One rubber, four [rubbers]. One clock, two [clocks].' },
-      { id: 'g_e2_6', type: 'fill_in_gap', question: 'Write the plural form (adding -es).', text: 'One brush, two [brushes]. One flash, five [flashes]. One class, three [classes].' },
-      { id: 'g_e2_7', type: 'multiple_choice', question: 'Choose correct word form for the number 8.', options: ['eight', 'eigth', 'eigt', 'eighteen'], answer: 'eight' },
-      { id: 'g_e2_8', type: 'multiple_choice', question: 'Choose correct word form for the number 12.', options: ['twelve', 'twelv', 'twelwe', 'twenty'], answer: 'twelve' },
-      { id: 'g_e2_9', type: 'correct_the_mistake', question: 'Click the incorrect plural word and type its correct form.', text: 'There are four watch on the shelf.', mistake: 'watch', correction: 'watches' },
-      { id: 'g_e2_10', type: 'correct_the_mistake', question: 'Correct the singular noun form.', text: 'I see one classes in the room.', mistake: 'classes', correction: 'class' },
-      { id: 'g_e2_11', type: 'sentence_unscramble', question: 'Unscramble the number math sentence.', words: ['Two', 'plus', 'three', 'is', 'five', '.'] },
-      { id: 'g_e2_12', type: 'choice_matrix', question: 'Classify spelling forms.', rows: ['boxs##incorrect', 'boxes##correct', 'pens##correct', 'ruleres##incorrect'], columns: ['correct', 'incorrect'], answers: { 'boxs': 'incorrect', 'boxes': 'correct', 'pens': 'correct', 'ruleres': 'incorrect' } },
-      { id: 'g_e2_13', type: 'category_sorting', question: 'Sort the numbers by even vs odd.', categories: ['Even Numbers', 'Odd Numbers'], items: [{ text: 'two', category: 'Even Numbers' }, { text: 'three', category: 'Odd Numbers' }, { text: 'four', category: 'Even Numbers' }, { text: 'five', category: 'Odd Numbers' }, { text: 'six', category: 'Even Numbers' }, { text: 'seven', category: 'Odd Numbers' }] },
-      { id: 'g_e2_14', type: 'drag_and_drop', question: 'Complete spelling blanks.', sentences: ['There is one #pen# on the desk.', 'There are six #rubbers# in the drawer.', 'We have five #books#.'], distractors: ['pens', 'rubber', 'book'] },
-      { id: 'g_e2_15', type: 'matching_pairs', question: 'Match digit values.', pairs: { '3': 'three', '7': 'seven', '9': 'nine', '14': 'fourteen', '21': 'twenty-one' } },
-      { id: 'g_e2_16', type: 'multiple_choice', question: 'Which letter comes immediately before M?', options: ['L', 'N', 'K', 'O'], answer: 'L' }
+      { id: 'g_e2_1', type: 'matching_pairs', question: 'Officer Higgins is cracking a secret blackboard code. Match uppercase vowel sounds to lowercase.', pairs: { 'A': 'a', 'E': 'e', 'I': 'i', 'O': 'o', 'U': 'u' } },
+      { id: 'g_e2_2', type: 'matching_pairs', question: 'Match the code letters with their alphabetic next neighbors.', pairs: { 'X': 'y', 'B': 'c', 'H': 'i', 'O': 'p', 'V': 'w' } },
+      { id: 'g_e2_3', type: 'multiple_choice', question: 'Which letter sounds exactly like the word "see"?', options: ['C', 'S', 'B', 'Z'], answer: 'C' },
+      { id: 'g_e2_4', type: 'multiple_choice', question: 'Which letter sounds exactly like the question word "why"?', options: ['Y', 'W', 'I', 'J'], answer: 'Y' },
+      { id: 'g_e2_5', type: 'fill_in_gap', question: 'Write the plural forms of the evidence items by adding -s.', text: 'One metal pencil, three [pencils]. One red rubber, four [rubbers]. One school clock, two [clocks].' },
+      { id: 'g_e2_6', type: 'fill_in_gap', question: 'Spelling plurals ending in -es. Complete the gaps.', text: 'One paint brush, two [brushes]. One light flash, five [flashes]. One history class, three [classes].' },
+      { id: 'g_e2_7', type: 'multiple_choice', question: 'Higgins counts 8 keys on the desk. Select the correct word form.', options: ['eight', 'eigth', 'eigt', 'eighteen'], answer: 'eight' },
+      { id: 'g_e2_8', type: 'multiple_choice', question: 'Higgins counts 12 footprints. Select the correct spelling.', options: ['twelve', 'twelv', 'twelwe', 'twenty'], answer: 'twelve' },
+      { id: 'g_e2_9', type: 'correct_the_mistake', question: 'Correct the singular footprint count mistake.', text: 'There are four watch on the shelf.', mistake: 'watch', correction: 'watches' },
+      { id: 'g_e2_10', type: 'correct_the_mistake', question: 'Correct the class count error.', text: 'I see one classes in the room.', mistake: 'classes', correction: 'class' },
+      { id: 'g_e2_11', type: 'sentence_unscramble', question: 'Unscramble Higgins\' mathematical code.', words: ['Two', 'plus', 'three', 'is', 'five', '.'] },
+      { id: 'g_e2_12', type: 'choice_matrix', question: 'Help Higgins classify these plural spelling forms.', rows: ['boxs##incorrect', 'boxes##correct', 'pens##correct', 'ruleres##incorrect'], columns: ['correct', 'incorrect'], answers: { 'boxs': 'incorrect', 'boxes': 'correct', 'pens': 'correct', 'ruleres': 'incorrect' } },
+      { id: 'g_e2_13', type: 'category_sorting', question: 'Sort the key numbers by even vs odd.', categories: ['Even Numbers', 'Odd Numbers'], items: [{ text: 'two', category: 'Even Numbers' }, { text: 'three', category: 'Odd Numbers' }, { text: 'four', category: 'Even Numbers' }, { text: 'five', category: 'Odd Numbers' }, { text: 'six', category: 'Even Numbers' }, { text: 'seven', category: 'Odd Numbers' }] },
+      { id: 'g_e2_14', type: 'drag_and_drop', question: 'Fill in the blanks of Higgins\' notebook.', sentences: ['There is one #pen# on the desk.', 'There are six #rubbers# in the drawer.', 'We have five #books#.'], distractors: ['pens', 'rubber', 'book'] },
+      { id: 'g_e2_15', type: 'matching_pairs', question: 'Match digits to their number spelling.', pairs: { '3': 'three', '7': 'seven', '9': 'nine', '14': 'fourteen', '21': 'twenty-one' } },
+      { id: 'g_e2_16', type: 'multiple_choice', question: 'Which letter comes immediately before M in the alphabet?', options: ['L', 'N', 'K', 'O'], answer: 'L' }
     ]
   },
   {
@@ -92,7 +92,7 @@ const block2Worksheets = [
   },
 
   // ==========================================
-  // CATEGORY 2: VOCABULARY (Learning Style: Visual / Color-Map Associations)
+  // CATEGORY 2: VOCABULARY
   // ==========================================
   {
     category_id: unit1Cats.VOCABULARY,
@@ -168,7 +168,7 @@ const block2Worksheets = [
   },
 
   // ==========================================
-  // CATEGORY 3: READING (Learning Style: Visual Stories & Dialogues)
+  // CATEGORY 3: READING
   // ==========================================
   {
     category_id: unit1Cats.READING,
@@ -211,11 +211,11 @@ const block2Worksheets = [
       { id: 'r_v2_9', type: 'sentence_unscramble', question: 'Unscramble dialogue sentence.', words: ['The', 'duck', 'replies', ',', 'I', 'can', 'swim', '.'] },
       { id: 'r_v2_10', type: 'choice_matrix', question: 'Are these dialogue details True or False?', rows: ['Frog can swim.##False', 'Duck can swim.##True', 'Frog can hop.##True', 'Duck can hop.##False'], columns: ['True', 'False'], answers: { 'Frog can swim.': 'False', 'Duck can swim.': 'True', 'Frog can hop.': 'True', 'Duck can hop.': 'False' } },
       { id: 'r_v2_11', type: 'category_sorting', question: 'Sort activities.', categories: ['Frog Ability', 'Duck Ability'], items: [{ text: 'hop high', category: 'Frog Ability' }, { text: 'swim', category: 'Duck Ability' }, { text: 'sit on log', category: 'Frog Ability' }, { text: 'fly', category: 'Duck Ability' }] },
-      { id: 'v_v2_12', type: 'drag_and_drop', question: 'Complete pond summary.', sentences: ['The frog is #green#.', 'The duck can #swim#.', 'The frog can #hop#.'], distractors: ['blue', 'run', 'sing'] },
-      { id: 'v_v2_13', type: 'order_sentences', question: 'Order dialogue.', sentences: ['First, the frog sits on the log.', 'Second, the frog greets the duck.', 'Third, the frog boasts about hopping.', 'Finally, the duck explains it can swim.'] },
-      { id: 'v_v2_14', type: 'multiple_choice', question: 'What color is the frog?', options: ['brown', 'green', 'yellow', 'red'], answer: 'green' },
-      { id: 'v_v2_15', type: 'fill_in_gap', question: 'Complete dialogue descriptors.', text: 'The log is [wet] and the frog is [green].' },
-      { id: 'v_v2_16', type: 'matching_pairs', question: 'Match dialogue words.', pairs: { 'Hello': 'frog', 'swim': 'duck', 'wet': 'log', 'high': 'hop' } }
+      { id: 'r_v2_12', type: 'drag_and_drop', question: 'Complete pond summary.', sentences: ['The frog is #green#.', 'The duck can #swim#.', 'The frog can #hop#.'], distractors: ['blue', 'run', 'sing'] },
+      { id: 'r_v2_13', type: 'order_sentences', question: 'Order dialogue.', sentences: ['First, the frog sits on the log.', 'Second, the frog greets the duck.', 'Third, the frog boasts about hopping.', 'Finally, the duck explains it can swim.'] },
+      { id: 'r_v2_14', type: 'multiple_choice', question: 'What color is the frog?', options: ['brown', 'green', 'yellow', 'red'], answer: 'green' },
+      { id: 'r_v2_15', type: 'fill_in_gap', question: 'Complete dialogue descriptors.', text: 'The log is [wet] and the frog is [green].' },
+      { id: 'r_v2_16', type: 'matching_pairs', question: 'Match dialogue words.', pairs: { 'Hello': 'frog', 'swim': 'duck', 'wet': 'log', 'high': 'hop' } }
     ]
   },
   {
@@ -244,7 +244,7 @@ const block2Worksheets = [
   },
 
   // ==========================================
-  // CATEGORY 4: WRITING (Learning Style: Kinetic / Spelling & Syntax Mechanics)
+  // CATEGORY 4: WRITING
   // ==========================================
   {
     category_id: unit1Cats.WRITING,
@@ -320,7 +320,7 @@ const block2Worksheets = [
   },
 
   // ==========================================
-  // CATEGORY 5: LISTENING (Learning Style: Auditory & Speech-Synthesis Boundaries)
+  // CATEGORY 5: LISTENING
   // ==========================================
   {
     category_id: unit1Cats.LISTENING,
