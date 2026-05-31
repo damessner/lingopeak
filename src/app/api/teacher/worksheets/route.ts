@@ -58,24 +58,12 @@ export async function POST(request: NextRequest) {
     // Format questions and inject IDs if missing
     const formattedQuestions = questions.map((q: any, index: number) => {
       const qId = q.id && q.id.startsWith('q_') ? q.id : `q_${Date.now()}_${index}`;
+      const { id, type, question, ...rest } = q;
       return {
         id: qId,
-        type: q.type,
-        question: q.question,
-        // Type specific parameters
-        ...(q.type === 'multiple_choice' && {
-          options: q.options || [],
-          answer: q.answer
-        }),
-        ...(q.type === 'fill_in_gap' && {
-          text: q.text
-        }),
-        ...(q.type === 'sentence_unscramble' && {
-          words: q.words || []
-        }),
-        ...(q.type === 'matching_pairs' && {
-          pairs: q.pairs || {}
-        })
+        type,
+        question,
+        ...rest
       };
     });
 
