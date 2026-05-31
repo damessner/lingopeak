@@ -1,10 +1,10 @@
 'use client';
 
-import { Question } from '@/lib/worksheet-types';
+import { CorrectTheMistakeQuestion } from '@/lib/worksheet-types';
 
 interface CorrectTheMistakeEditorProps {
-  question: Question;
-  onChange: (fields: Partial<Question>) => void;
+  question: CorrectTheMistakeQuestion;
+  onChange: (fields: Partial<CorrectTheMistakeQuestion>) => void;
 }
 
 export default function CorrectTheMistakeEditor({ question, onChange }: CorrectTheMistakeEditorProps) {

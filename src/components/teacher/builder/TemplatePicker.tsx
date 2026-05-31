@@ -8,7 +8,7 @@ interface Template {
   desc: string;
   emoji: string;
   badge: string;
-  questions: Omit<Question, 'id'>[];
+  questions: any[];
 }
 
 const TEMPLATES: Template[] = [
@@ -127,6 +127,143 @@ const TEMPLATES: Template[] = [
         ]
       }
     ]
+  },
+  {
+    id: 'vocabulary_gap_fill',
+    name: 'Vocabulary Gap Fill',
+    desc: 'Vacation and travel context with Drag & Drop sentence pools and gaps.',
+    emoji: '✈️',
+    badge: '🏆',
+    questions: [
+      {
+        type: 'drag_and_drop',
+        question: 'Drag the correct travel vocabulary word into each sentence gap:',
+        sentences: [
+          'Don\'t forget to pack your [passport] before going to the airport.',
+          'We stayed at a luxury [hotel] next to the beach.',
+          'The flight was delayed, so we waited in the airport [lounge].'
+        ],
+        distractors: ['car', 'road', 'ticket'],
+        distractors_raw: 'car, road, ticket'
+      },
+      {
+        type: 'fill_in_gap',
+        question: 'Type in the correct transportation words:',
+        text: 'The fastest way to travel across oceans is by [airplane], but some people prefer taking a cruise [ship].'
+      }
+    ]
+  },
+  {
+    id: 'grammar_correction_drill',
+    name: 'Grammar Correction Drill',
+    desc: 'Focuses on finding spelling and past participle errors in written paragraphs.',
+    emoji: '✏️',
+    badge: '👑',
+    questions: [
+      {
+        type: 'correct_the_mistake',
+        question: 'Correct the spelling mistake in this sentence:',
+        text: 'I recieved a letter from my teacher yesterday.',
+        mistake: 'recieved',
+        correction: 'received'
+      },
+      {
+        type: 'correct_the_mistake',
+        question: 'Correct the past participle error:',
+        text: 'He has write three books about history.',
+        mistake: 'write',
+        correction: 'written'
+      },
+      {
+        type: 'multiple_choice',
+        question: 'Which of the following is correct?',
+        options: [
+          'They was going to the theater.',
+          'They were going to the theater.',
+          'They is going to the theater.',
+          'They am going to the theater.'
+        ],
+        answer: 'They were going to the theater.'
+      }
+    ]
+  },
+  {
+    id: 'idioms_crossword',
+    name: 'Idioms Crossword Puzzle',
+    desc: 'Classic crossword layout pre-designed with idiom definitions.',
+    emoji: '🧠',
+    badge: '🦉',
+    questions: [
+      {
+        type: 'crossword',
+        question: 'Solve the crossword containing common English idioms:',
+        crossword_items: [
+          { word: 'PIECE', clue: 'Something very easy: A ___ of cake' },
+          { word: 'RAIN', clue: 'Postpone something: Take a ___ check' },
+          { word: 'BREAK', clue: 'Wish good luck to a performer: ___ a leg' }
+        ],
+        grid: [
+          ['P', 'I', 'E', 'C', 'E'],
+          ['R', '.', '.', '.', '.'],
+          ['A', '.', 'B', '.', '.'],
+          ['I', '.', 'R', '.', '.'],
+          ['N', '.', 'E', 'A', 'K']
+        ],
+        clues: [
+          { number: 1, direction: 'across', row: 0, col: 0, text: 'Something very easy: A ___ of cake' },
+          { number: 1, direction: 'down', row: 0, col: 0, text: 'Postpone something: Take a ___ check' },
+          { number: 2, direction: 'down', row: 2, col: 2, text: 'Wish good luck to a performer: ___ a leg (vertical portion)' }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'category_sorting_parts_of_speech',
+    name: 'Parts of Speech Classifier',
+    desc: 'Sorting bin widget separating adjectives, adverbs, and verbs.',
+    emoji: '🏷️',
+    badge: '🎯',
+    questions: [
+      {
+        type: 'category_sorting',
+        question: 'Sort these grammatical words into their correct parts of speech:',
+        categories: ['Verb', 'Adjective', 'Adverb'],
+        categories_raw: 'Verb, Adjective, Adverb',
+        items: [
+          { text: 'quickly', category: 'Adverb' },
+          { text: 'beautiful', category: 'Adjective' },
+          { text: 'shout', category: 'Verb' },
+          { text: 'silently', category: 'Adverb' },
+          { text: 'enormous', category: 'Adjective' },
+          { text: 'explore', category: 'Verb' }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'subject_verb_agreement',
+    name: 'Subject-Verb Agreement',
+    desc: 'Helps students practice matching plural/singular subjects to verb modifications.',
+    emoji: '⚖️',
+    badge: '🎓',
+    questions: [
+      {
+        type: 'fill_in_gap',
+        question: 'Provide the correct form of the verb "to be" or "to have":',
+        text: 'Every student in the classroom [has] (have) a notebook. None of them [is] (be) absent.'
+      },
+      {
+        type: 'multiple_choice',
+        question: 'Choose the correct verb to agree with the subject:',
+        options: [
+          'The cats runs outside.',
+          'The cat runs outside.',
+          'The cat run outside.',
+          'The cats is running outside.'
+        ],
+        answer: 'The cat runs outside.'
+      }
+    ]
   }
 ];
 
@@ -162,20 +299,24 @@ export default function TemplatePicker({ onSelect, isOpen, onClose }: TemplatePi
           </button>
         </div>
 
-        <div className="space-y-4 max-h-[350px] overflow-y-auto">
+        <div className="space-y-4 max-h-[380px] overflow-y-auto pr-1">
           {TEMPLATES.map((tmpl) => (
             <button
               key={tmpl.id}
+              type="button"
               onClick={() => handleSelectTemplate(tmpl)}
               className="w-full flex gap-4 text-left p-3.5 bg-slate-950/40 hover:bg-slate-950 border border-slate-850 hover:border-slate-800 rounded-2xl transition-all cursor-pointer group"
             >
               <span className="text-3xl p-3 bg-slate-900 rounded-xl group-hover:scale-110 transition-transform select-none">{tmpl.emoji}</span>
-              <div>
+              <div className="flex-1 min-w-0">
                 <h4 className="text-xs font-bold text-white uppercase tracking-tight">{tmpl.name}</h4>
                 <p className="text-[10px] text-slate-400 mt-1 leading-normal">{tmpl.desc}</p>
-                <span className="inline-block text-[8px] font-black text-indigo-400 uppercase tracking-widest mt-2">
-                  Contains {tmpl.questions.length} exercises
-                </span>
+                <div className="flex justify-between items-center mt-2.5">
+                  <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">
+                    Contains {tmpl.questions.length} exercises
+                  </span>
+                  <span className="text-xs" title="Rewards Badge">{tmpl.badge}</span>
+                </div>
               </div>
             </button>
           ))}

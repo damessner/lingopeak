@@ -1,10 +1,10 @@
 'use client';
 
-import { Question } from '@/lib/worksheet-types';
+import { DragAndDropQuestion } from '@/lib/worksheet-types';
 
 interface DragAndDropEditorProps {
-  question: Question;
-  onChange: (fields: Partial<Question>) => void;
+  question: DragAndDropQuestion;
+  onChange: (fields: Partial<DragAndDropQuestion>) => void;
 }
 
 export default function DragAndDropEditor({ question, onChange }: DragAndDropEditorProps) {

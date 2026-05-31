@@ -1,10 +1,10 @@
 'use client';
 
-import { Question } from '@/lib/worksheet-types';
+import { MultipleChoiceQuestion } from '@/lib/worksheet-types';
 
 interface MultipleChoiceEditorProps {
-  question: Question;
-  onChange: (fields: Partial<Question>) => void;
+  question: MultipleChoiceQuestion;
+  onChange: (fields: Partial<MultipleChoiceQuestion>) => void;
   qIdx: number;
 }
 

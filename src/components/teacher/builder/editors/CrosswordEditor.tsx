@@ -1,11 +1,11 @@
 'use client';
 
-import { Question } from '@/lib/worksheet-types';
+import { CrosswordQuestion } from '@/lib/worksheet-types';
 import { generateCrossword } from '@/lib/gridGenerators';
 
 interface CrosswordEditorProps {
-  question: Question;
-  onChange: (fields: Partial<Question>) => void;
+  question: CrosswordQuestion;
+  onChange: (fields: Partial<CrosswordQuestion>) => void;
 }
 
 export default function CrosswordEditor({ question, onChange }: CrosswordEditorProps) {

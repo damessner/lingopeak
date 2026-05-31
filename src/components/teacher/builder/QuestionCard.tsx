@@ -65,6 +65,7 @@ export default function QuestionCard({
   const [previewMode, setPreviewMode] = useState(false);
   const [previewVal, setPreviewVal] = useState<any>(null);
   const [smartFilling, setSmartFilling] = useState(false);
+  const [flash, setFlash] = useState(false);
 
   const handleSmartFill = async () => {
     setSmartFilling(true);
@@ -78,6 +79,8 @@ export default function QuestionCard({
         const data = await res.json();
         if (data.question) {
           onChange(data.question);
+          setFlash(true);
+          setTimeout(() => setFlash(false), 1200);
         }
       } else {
         const err = await res.json();
@@ -92,33 +95,27 @@ export default function QuestionCard({
   };
 
   const renderEditor = () => {
-    const props = {
-      question,
-      onChange,
-      qIdx: index
-    };
-
     switch (question.type) {
       case 'multiple_choice':
-        return <MultipleChoiceEditor {...props} />;
+        return <MultipleChoiceEditor question={question} onChange={onChange as any} qIdx={index} />;
       case 'fill_in_gap':
-        return <FillInGapEditor {...props} />;
+        return <FillInGapEditor question={question} onChange={onChange as any} />;
       case 'drag_and_drop':
-        return <DragAndDropEditor {...props} />;
+        return <DragAndDropEditor question={question} onChange={onChange as any} />;
       case 'category_sorting':
-        return <CategorySortingEditor {...props} />;
+        return <CategorySortingEditor question={question} onChange={onChange as any} />;
       case 'correct_the_mistake':
-        return <CorrectTheMistakeEditor {...props} />;
+        return <CorrectTheMistakeEditor question={question} onChange={onChange as any} />;
       case 'choice_matrix':
-        return <ChoiceMatrixEditor {...props} />;
+        return <ChoiceMatrixEditor question={question} onChange={onChange as any} />;
       case 'sentence_unscramble':
-        return <SentenceUnscrambleEditor {...props} />;
+        return <SentenceUnscrambleEditor question={question} onChange={onChange as any} />;
       case 'matching_pairs':
-        return <MatchingPairsEditor {...props} />;
+        return <MatchingPairsEditor question={question} onChange={onChange as any} />;
       case 'crossword':
-        return <CrosswordEditor {...props} />;
+        return <CrosswordEditor question={question} onChange={onChange as any} />;
       case 'word_search':
-        return <WordSearchEditor {...props} />;
+        return <WordSearchEditor question={question} onChange={onChange as any} />;
       default:
         return null;
     }
@@ -165,8 +162,10 @@ export default function QuestionCard({
       onDragOver={onDragOver}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
-      className={`bg-slate-950/40 border border-slate-850 p-5 rounded-2xl space-y-4 relative transition-all ${
+      className={`bg-slate-950/40 border p-5 rounded-2xl space-y-4 relative transition-all duration-500 ${
         isDragged ? 'opacity-40 border-dashed border-indigo-500' : ''
+      } ${
+        flash ? 'border-emerald-500 bg-emerald-950/20 shadow-[0_0_15px_rgba(16,185,129,0.15)] ring-1 ring-emerald-500/25' : 'border-slate-850'
       }`}
     >
       {/* Header: Click to collapse / expand, reorder, delete */}

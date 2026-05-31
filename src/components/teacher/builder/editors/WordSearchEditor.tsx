@@ -1,11 +1,11 @@
 'use client';
 
-import { Question } from '@/lib/worksheet-types';
+import { WordSearchQuestion } from '@/lib/worksheet-types';
 import { generateWordSearch } from '@/lib/gridGenerators';
 
 interface WordSearchEditorProps {
-  question: Question;
-  onChange: (fields: Partial<Question>) => void;
+  question: WordSearchQuestion;
+  onChange: (fields: Partial<WordSearchQuestion>) => void;
 }
 
 export default function WordSearchEditor({ question, onChange }: WordSearchEditorProps) {

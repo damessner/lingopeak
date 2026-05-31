@@ -1,10 +1,10 @@
 'use client';
 
-import { Question } from '@/lib/worksheet-types';
+import { MatchingPairsQuestion } from '@/lib/worksheet-types';
 
 interface MatchingPairsEditorProps {
-  question: Question;
-  onChange: (fields: Partial<Question>) => void;
+  question: MatchingPairsQuestion;
+  onChange: (fields: Partial<MatchingPairsQuestion>) => void;
 }
 
 export default function MatchingPairsEditor({ question, onChange }: MatchingPairsEditorProps) {
@@ -49,7 +49,7 @@ export default function MatchingPairsEditor({ question, onChange }: MatchingPair
               placeholder="Word A (e.g. hot)"
               className="flex-1 bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-bold outline-none"
             />
-            <span className="text-slate-600 font-bold">↔</span>
+            <span className="text-slate-650">↔</span>
             <input
               type="text"
               value={val}

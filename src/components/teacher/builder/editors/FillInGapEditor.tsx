@@ -1,10 +1,10 @@
 'use client';
 
-import { Question } from '@/lib/worksheet-types';
+import { FillInGapQuestion } from '@/lib/worksheet-types';
 
 interface FillInGapEditorProps {
-  question: Question;
-  onChange: (fields: Partial<Question>) => void;
+  question: FillInGapQuestion;
+  onChange: (fields: Partial<FillInGapQuestion>) => void;
 }
 
 export default function FillInGapEditor({ question, onChange }: FillInGapEditorProps) {

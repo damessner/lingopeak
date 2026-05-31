@@ -2,12 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import { Question, Category, QuestionType, Worksheet } from '@/lib/worksheet-types';
-import { generateWordSearch, generateCrossword } from '@/lib/gridGenerators';
 
 import QuestionCard from './builder/QuestionCard';
 import QuestionTypePicker from './builder/QuestionTypePicker';
 import TemplatePicker from './builder/TemplatePicker';
 import TestDriveModal from './builder/TestDriveModal';
+
+import { useWorksheetBuilder } from './builder/useWorksheetBuilder';
+import { validateQuestion } from './builder/WorksheetValidation';
+import AICoPilotPanel from './builder/AICoPilotPanel';
+import BadgeEmojiPicker from './builder/BadgeEmojiPicker';
+import ErrorBoundary from './builder/ErrorBoundary';
 
 interface WorksheetBuilderProps {
   categories: Category[];
@@ -17,76 +22,43 @@ interface WorksheetBuilderProps {
 }
 
 export default function WorksheetBuilder({ categories, worksheet, onSave, onCancel }: WorksheetBuilderProps) {
-  const [title, setTitle] = useState(worksheet?.title || '');
-  const [categoryId, setCategoryId] = useState(worksheet?.category_id || categories[0]?.id || '');
-  const [tier, setTier] = useState<'EXPLORER' | 'VOYAGER' | 'CHALLENGER' | 'SUMMIT'>(worksheet?.tier || 'EXPLORER');
-  const [badgeEmoji, setBadgeEmoji] = useState(worksheet?.badge_emoji || '🥇');
-  
-  // Parse initial questions
-  const getInitialQuestions = (): Question[] => {
-    if (!worksheet?.questions_json) return [];
-    try {
-      const parsed = JSON.parse(worksheet.questions_json);
-      if (!Array.isArray(parsed)) return [];
-      
-      return parsed.map((q: any) => {
-        const mapped = { ...q };
-        if (q.type === 'drag_and_drop') {
-          const correctWords: string[] = [];
-          (q.sentences || []).forEach((s: string) => {
-            const matches = s.match(/\[([^\]]+)\]/g) || [];
-            matches.forEach(m => correctWords.push(m.slice(1, -1).trim()));
-          });
-          const allWords = q.words || [];
-          const distractors = allWords.filter((w: string) => !correctWords.includes(w));
-          mapped.distractors = distractors;
-          mapped.distractors_raw = distractors.join(', ');
-        } else if (q.type === 'category_sorting') {
-          mapped.categories_raw = (q.categories || []).join(', ');
-        } else if (q.type === 'choice_matrix') {
-          mapped.rows_raw = (q.rows || []).join(', ');
-          mapped.columns_raw = (q.columns || []).join(', ');
-        } else if (q.type === 'crossword') {
-          mapped.crossword_items = q.crossword_items || (q.clues || []).map((c: any) => {
-            let word = '';
-            for (let i = 0; i < c.length; i++) {
-              const r = c.direction === 'across' ? c.row : c.row + i;
-              const col = c.direction === 'across' ? c.col + i : c.col;
-              word += q.grid[r]?.[col] || '';
-            }
-            return { word, clue: c.text };
-          });
-        } else if (q.type === 'word_search') {
-          mapped.word_search_words = (q.words || []).join(', ');
-        }
-        return mapped;
-      });
-    } catch (e) {
-      console.error(e);
-      return [];
-    }
-  };
-  
-  const [questions, setQuestions] = useState<Question[]>(getInitialQuestions);
+  // Leverage extracted custom state & actions hook
+  const {
+    title,
+    setTitle,
+    categoryId,
+    setCategoryId,
+    tier,
+    setTier,
+    badgeEmoji,
+    setBadgeEmoji,
+    questions,
+    setQuestions,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    hasDraft,
+    draftTime,
+    recoverDraft,
+    discardDraft,
+    localStorageKey
+  } = useWorksheetBuilder({ categories, worksheet });
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // UX Modals & Popovers States
+  // Modal & palette visibility states
   const [showTypePalette, setShowTypePalette] = useState(false);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [showTestDrive, setShowTestDrive] = useState(false);
   const [collapsedQuestions, setCollapsedQuestions] = useState<Record<string, boolean>>({});
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-
-  // AI Worksheet Generator States
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
-  const [aiPrompt, setAiPrompt] = useState('');
-  const [aiCount, setAiCount] = useState(5);
-  const [aiGenerating, setAiGenerating] = useState(false);
 
   // Form helper: add a new question
   const handleAddQuestion = (type: QuestionType) => {
-    const newQuestion: Question = {
+    const newQuestion = {
       id: `q_${Date.now()}_${questions.length}`,
       type,
       question: '',
@@ -135,7 +107,7 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
         words: [],
         grid: []
       })
-    };
+    } as any;
     setQuestions([...questions, newQuestion]);
   };
 
@@ -160,6 +132,63 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
     setQuestions(updated);
   };
 
+  const handleResetQuestion = (index: number) => {
+    const type = questions[index].type;
+    const defaultQuestion = {
+      id: questions[index].id,
+      type,
+      question: '',
+      ...(type === 'multiple_choice' && {
+        options: ['', '', '', ''],
+        answer: ''
+      }),
+      ...(type === 'fill_in_gap' && {
+        text: ''
+      }),
+      ...(type === 'sentence_unscramble' && {
+        words: []
+      }),
+      ...(type === 'matching_pairs' && {
+        pairs: { '': '' }
+      }),
+      ...(type === 'drag_and_drop' && {
+        sentences: [''],
+        distractors: [],
+        distractors_raw: ''
+      }),
+      ...(type === 'category_sorting' && {
+        categories: ['', ''],
+        categories_raw: '',
+        items: [{ text: '', category: '' }]
+      }),
+      ...(type === 'correct_the_mistake' && {
+        text: '',
+        mistake: '',
+        correction: ''
+      }),
+      ...(type === 'choice_matrix' && {
+        rows: [''],
+        rows_raw: '',
+        columns: [''],
+        columns_raw: '',
+        answers: {}
+      }),
+      ...(type === 'crossword' && {
+        crossword_items: [{ word: '', clue: '' }],
+        grid: [],
+        clues: []
+      }),
+      ...(type === 'word_search' && {
+        word_search_words: '',
+        words: [],
+        grid: []
+      })
+    } as any;
+    const updated = [...questions];
+    updated[index] = defaultQuestion;
+    setQuestions(updated);
+  };
+
   const toggleCollapse = (qId: string) => {
     setCollapsedQuestions(prev => ({
       ...prev,
@@ -179,71 +208,21 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
     setQuestions(updated);
   };
 
-  // AI Worksheet Generator Trigger
-  const handleAIGenerateWorksheet = async () => {
-    if (!aiPrompt.trim()) return;
-    setAiGenerating(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/teacher/worksheets/ai-generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'generate_worksheet',
-          prompt: aiPrompt.trim(),
-          tier,
-          count: aiCount
-        })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.questions && Array.isArray(data.questions)) {
-          // Pre-process crossword and word searches generated by AI to construct grids
-          const processed = data.questions.map((q: any) => {
-            const mapped = { ...q };
-            if (q.type === 'crossword' && q.crossword_items) {
-              try {
-                const layout = generateCrossword(q.crossword_items);
-                mapped.grid = layout.grid;
-                mapped.clues = layout.clues;
-              } catch (err) {}
-            } else if (q.type === 'word_search' && q.words) {
-              try {
-                const layout = generateWordSearch(q.words);
-                mapped.grid = layout.grid;
-                mapped.words = layout.words;
-                mapped.word_search_words = q.words.join(', ');
-              } catch (err) {}
-            } else if (q.type === 'drag_and_drop') {
-              mapped.distractors_raw = (q.distractors || []).join(', ');
-            } else if (q.type === 'category_sorting') {
-              mapped.categories_raw = (q.categories || []).join(', ');
-            } else if (q.type === 'choice_matrix') {
-              mapped.rows_raw = (q.rows || []).join(', ');
-              mapped.columns_raw = (q.columns || []).join(', ');
-            }
-            return mapped;
-          });
-
-          setQuestions(processed);
-          setAiPanelOpen(false);
-          setAiPrompt('');
-        }
-      } else {
-        const err = await res.json();
-        throw new Error(err.error || 'Failed to generate questions.');
-      }
-    } catch (err: any) {
-      setError(err.message || 'AI Generation failed. Please try again.');
-    } finally {
-      setAiGenerating(false);
-    }
-  };
-
-  // Keyboard Shortcuts Hook
+  // Keyboard Shortcuts hook integrating undo/redo callbacks
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl + Z: Undo
+      if (e.ctrlKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (canUndo) undo();
+      }
+      
+      // Ctrl + Y: Redo
+      if (e.ctrlKey && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        if (canRedo) redo();
+      }
+
       // Ctrl + Enter or Ctrl + S to save
       if ((e.ctrlKey && e.key === 'Enter') || (e.ctrlKey && e.key === 's')) {
         e.preventDefault();
@@ -260,7 +239,7 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [undo, redo, canUndo, canRedo]);
 
   // Submit to API
   const handleSaveSubmit = async (e: React.FormEvent) => {
@@ -274,99 +253,20 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
       return;
     }
 
-    // Validation for question entries
+    // Call pure validation helper
     for (let i = 0; i < questions.length; i++) {
-      const q = questions[i];
-      if (!q.question.trim()) {
-        setError(`Question ${i + 1} instructions/prompt is required.`);
+      const errMessage = validateQuestion(questions[i], i);
+      if (errMessage) {
+        setError(errMessage);
         return;
-      }
-
-      if (q.type === 'multiple_choice') {
-        if (!q.options || q.options.some(opt => !opt.trim())) {
-          setError(`Question ${i + 1} (Multiple Choice) must have all 4 options filled out.`);
-          return;
-        }
-        if (!q.answer) {
-          setError(`Question ${i + 1} (Multiple Choice) must have a correct choice selected.`);
-          return;
-        }
-      } else if (q.type === 'fill_in_gap') {
-        if (!q.text?.trim()) {
-          setError(`Question ${i + 1} (Fill in the Gap) text is required.`);
-          return;
-        }
-        if (!q.text.includes('[') || !q.text.includes(']')) {
-          setError(`Question ${i + 1} (Fill in the Gap) must contain at least one gap in square brackets, e.g., [is].`);
-          return;
-        }
-      } else if (q.type === 'sentence_unscramble') {
-        if (!q.words || q.words.length < 2) {
-          setError(`Question ${i + 1} (Sentence Unscramble) sentence must contain at least 2 words.`);
-          return;
-        }
-      } else if (q.type === 'matching_pairs') {
-        if (!q.pairs || Object.keys(q.pairs).length === 0 || Object.keys(q.pairs).some(k => !k.trim() || !q.pairs![k].trim())) {
-          setError(`Question ${i + 1} (Matching Pairs) must have at least one valid key-value pair.`);
-          return;
-        }
-      } else if (q.type === 'drag_and_drop') {
-        if (!q.sentences || q.sentences.length === 0 || q.sentences.some(s => !s.trim())) {
-          setError(`Question ${i + 1} (Drag & Drop) must have sentences text entered.`);
-          return;
-        }
-        if (q.sentences.every(s => !s.includes('[') || !s.includes(']'))) {
-          setError(`Question ${i + 1} (Drag & Drop) must have at least one slot wrapped in brackets, e.g. [dog].`);
-          return;
-        }
-      } else if (q.type === 'category_sorting') {
-        if (!q.categories || q.categories.length < 2) {
-          setError(`Question ${i + 1} (Category Sorting) must have at least 2 categories defined.`);
-          return;
-        }
-        if (!q.items || q.items.length === 0 || q.items.some(it => !it.text.trim() || !it.category.trim())) {
-          setError(`Question ${i + 1} (Category Sorting) must contain valid items matched to sorting bins.`);
-          return;
-        }
-      } else if (q.type === 'correct_the_mistake') {
-        if (!q.text?.trim() || !q.mistake?.trim() || !q.correction?.trim()) {
-          setError(`Question ${i + 1} (Correct the Mistake) sentence, mistake, and correction words are all required.`);
-          return;
-        }
-        const cleanWords = q.text.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").split(/\s+/).map(w => w.toLowerCase());
-        if (!cleanWords.includes(q.mistake.toLowerCase())) {
-          setError(`Question ${i + 1} (Correct the Mistake) mistake word "${q.mistake}" must match one of the words in the sentence.`);
-          return;
-        }
-      } else if (q.type === 'choice_matrix') {
-        if (!q.rows || q.rows.length === 0 || !q.columns || q.columns.length === 0) {
-          setError(`Question ${i + 1} (Choice Matrix) must have rows and columns tags defined.`);
-          return;
-        }
-        const mappedRows = Object.keys(q.answers || {});
-        if (mappedRows.length !== q.rows.length || mappedRows.some(r => !q.answers![r])) {
-          setError(`Question ${i + 1} (Choice Matrix) must have correct column selections selected for all rows.`);
-          return;
-        }
-      } else if (q.type === 'crossword') {
-        if (!q.grid || q.grid.length <= 1 || !q.clues || q.clues.length === 0) {
-          setError(`Question ${i + 1} (Crossword) crossword grid must be generated. Click "Auto-Generate Crossword Layout".`);
-          return;
-        }
-      } else if (q.type === 'word_search') {
-        if (!q.grid || q.grid.length <= 1) {
-          setError(`Question ${i + 1} (Word Search) letter grid must be generated. Click "Auto-Generate Word Search".`);
-          return;
-        }
       }
     }
 
     setSaving(true);
     setError(null);
 
-    // Dynamic processing of drag and drop correct answers
     const processedQuestions = questions.map((q) => {
-      const qCopy = { ...q };
+      const qCopy = { ...q } as any;
       if (q.type === 'drag_and_drop') {
         const correctWords: string[] = [];
         (q.sentences || []).forEach((s: string) => {
@@ -398,6 +298,9 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
         throw new Error(data.error || 'Failed to save worksheet');
       }
 
+      // Clear local draft upon successful save
+      localStorage.removeItem(localStorageKey);
+
       onSave();
     } catch (err: any) {
       setError(err.message || 'Server error. Please try again.');
@@ -409,6 +312,32 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
   return (
     <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl space-y-6 max-w-4xl mx-auto animate-scaleUp">
       
+      {/* Draft Recovery Banner */}
+      {hasDraft && (
+        <div className="bg-indigo-950/80 border border-indigo-500/30 p-4 rounded-2xl flex items-center justify-between text-xs font-bold text-indigo-300 animate-scaleUp">
+          <div className="flex items-center gap-2">
+            <span>💾</span>
+            <span>We found an unsaved local draft of this worksheet from {draftTime || 'recently'}.</span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={recoverDraft}
+              className="bg-indigo-600 hover:bg-indigo-550 text-white px-3.5 py-1.5 rounded-xl cursor-pointer font-extrabold text-[10px] transition-colors"
+            >
+              Recover Draft
+            </button>
+            <button
+              type="button"
+              onClick={discardDraft}
+              className="bg-slate-900 hover:bg-slate-855 text-slate-400 px-3.5 py-1.5 rounded-xl cursor-pointer border border-slate-800 font-bold text-[10px] transition-colors"
+            >
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="border-b border-slate-800/80 pb-4 flex justify-between items-center">
         <div>
@@ -419,11 +348,34 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
             {worksheet?.id ? 'Worksheet Editor' : 'Worksheet Creator'}
           </h2>
         </div>
-        <div className="flex gap-2">
+        
+        <div className="flex gap-2 items-center flex-wrap">
+          {/* Undo/Redo Buttons */}
+          <div className="flex bg-slate-950 border border-slate-850 rounded-xl overflow-hidden mr-2">
+            <button
+              type="button"
+              onClick={undo}
+              disabled={!canUndo}
+              className="text-xs hover:bg-slate-900 disabled:opacity-25 text-slate-350 font-bold px-3 py-2 cursor-pointer transition-colors border-r border-slate-855 select-none"
+              title="Undo change (Ctrl+Z)"
+            >
+              ↩ Undo
+            </button>
+            <button
+              type="button"
+              onClick={redo}
+              disabled={!canRedo}
+              className="text-xs hover:bg-slate-900 disabled:opacity-25 text-slate-355 font-bold px-3 py-2 cursor-pointer transition-colors select-none"
+              title="Redo change (Ctrl+Y)"
+            >
+              ↪ Redo
+            </button>
+          </div>
+          
           <button
             type="button"
             onClick={() => setShowTemplatePicker(true)}
-            className="text-xs bg-slate-900 hover:bg-slate-850 text-indigo-400 hover:text-indigo-300 font-bold border border-slate-800 px-4 py-2 rounded-xl cursor-pointer transition-colors"
+            className="text-xs bg-slate-900 hover:bg-slate-855 text-indigo-400 hover:text-indigo-300 font-bold border border-slate-800 px-4 py-2 rounded-xl cursor-pointer transition-colors"
           >
             📋 Use Template
           </button>
@@ -445,57 +397,16 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
         </div>
       )}
 
-      {/* AI generator copilot toggle */}
-      <div className="border border-indigo-500/20 rounded-2xl bg-indigo-950/10 overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setAiPanelOpen(!aiPanelOpen)}
-          className="w-full flex items-center justify-between p-4 text-left font-bold text-xs text-indigo-300 hover:text-white cursor-pointer select-none"
-        >
-          <span className="flex items-center gap-2">🤖 AI Co-Pilot Worksheet Generator</span>
-          <span>{aiPanelOpen ? '▲ Hide' : '▼ Expand'}</span>
-        </button>
-
-        {aiPanelOpen && (
-          <div className="p-4 border-t border-indigo-500/10 space-y-4 bg-indigo-950/20 animate-scaleUp">
-            <div className="space-y-1">
-              <label className="block text-[9px] font-black text-indigo-400 uppercase tracking-widest">Generate Worksheet by Prompt</label>
-              <textarea
-                value={aiPrompt}
-                onChange={(e) => setAiPrompt(e.target.value)}
-                placeholder="e.g. Present perfect vs past simple, including matching verbs and gap filling exercises about travel experiences"
-                rows={2}
-                className="w-full bg-slate-950 border border-indigo-500/10 rounded-xl p-3 text-xs text-slate-300 font-bold outline-none focus:border-indigo-500"
-              />
-            </div>
-
-            <div className="flex justify-between items-center gap-4 flex-wrap">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Number of Questions:</span>
-                <select
-                  value={aiCount}
-                  onChange={(e) => setAiCount(Number(e.target.value))}
-                  className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-300 font-bold cursor-pointer"
-                >
-                  <option value={3}>3 Questions</option>
-                  <option value={5}>5 Questions</option>
-                  <option value={7}>7 Questions</option>
-                  <option value={10}>10 Questions</option>
-                </select>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleAIGenerateWorksheet}
-                disabled={aiGenerating || !aiPrompt.trim()}
-                className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 text-white disabled:text-slate-650 border border-indigo-500/20 text-xs font-bold py-2 px-5 rounded-xl cursor-pointer disabled:cursor-not-allowed transition-all"
-              >
-                {aiGenerating ? '🤖 Generating questions...' : '⚡ Generate Worksheet'}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Extracted AI Co-Pilot Panel */}
+      <AICoPilotPanel
+        isOpen={aiPanelOpen}
+        onToggle={() => setAiPanelOpen(!aiPanelOpen)}
+        tier={tier}
+        onGenerateQuestions={(newQuestions) => {
+          setQuestions(newQuestions);
+          displayMessage('AI Questions generated successfully!', 'success');
+        }}
+      />
 
       {/* Editor Form */}
       <form onSubmit={handleSaveSubmit} className="space-y-6">
@@ -543,29 +454,10 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
             </select>
           </div>
 
+          {/* Curated reward badge popover grid picker */}
           <div className="space-y-2">
             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Reward Badge</label>
-            <select
-              value={badgeEmoji}
-              onChange={(e) => setBadgeEmoji(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-300 font-bold outline-none focus:border-indigo-500 transition-colors cursor-pointer"
-            >
-              <option value="🥇">🥇 Gold Medal</option>
-              <option value="🥈">🥈 Silver Medal</option>
-              <option value="🥉">🥉 Bronze Medal</option>
-              <option value="🏆">🏆 Trophy</option>
-              <option value="🎖️">🎖️ Military Medal</option>
-              <option value="⭐">⭐ Star</option>
-              <option value="🎯">🎯 Target</option>
-              <option value="🚀">🚀 Rocket</option>
-              <option value="💡">💡 Idea Bulb</option>
-              <option value="🧩">🧩 Puzzle Piece</option>
-              <option value="🎨">🎨 Art Palette</option>
-              <option value="🧠">🧠 Brain</option>
-              <option value="👑">👑 Crown</option>
-              <option value="🦉">🦉 Owl</option>
-              <option value="🎒">🎒 Backpack</option>
-            </select>
+            <BadgeEmojiPicker value={badgeEmoji} onChange={setBadgeEmoji} />
           </div>
         </div>
 
@@ -604,37 +496,42 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
                 const isCollapsed = !!collapsedQuestions[q.id];
                 
                 return (
-                  <QuestionCard
+                  <ErrorBoundary
                     key={q.id}
-                    question={q}
-                    index={idx}
-                    totalQuestions={questions.length}
-                    isCollapsed={isCollapsed}
-                    onToggleCollapse={() => toggleCollapse(q.id)}
-                    onMoveUp={() => handleMoveQuestion(idx, 'up')}
-                    onMoveDown={() => handleMoveQuestion(idx, 'down')}
-                    onRemove={() => handleRemoveQuestion(idx)}
-                    onDuplicate={() => handleDuplicateQuestion(idx)}
-                    onChange={(fields) => handleQuestionChange(idx, fields)}
-                    onDragStart={(e) => {
-                      setDraggedIndex(idx);
-                      e.dataTransfer.effectAllowed = 'move';
-                    }}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      if (draggedIndex === null || draggedIndex === idx) return;
-                      const updated = [...questions];
-                      const [draggedItem] = updated.splice(draggedIndex, 1);
-                      updated.splice(idx, 0, draggedItem);
-                      setQuestions(updated);
-                      setDraggedIndex(null);
-                    }}
-                    onDragEnd={() => setDraggedIndex(null)}
-                    isDragged={draggedIndex === idx}
-                  />
+                    onReset={() => handleResetQuestion(idx)}
+                    onDelete={() => handleRemoveQuestion(idx)}
+                  >
+                    <QuestionCard
+                      question={q}
+                      index={idx}
+                      totalQuestions={questions.length}
+                      isCollapsed={isCollapsed}
+                      onToggleCollapse={() => toggleCollapse(q.id)}
+                      onMoveUp={() => handleMoveQuestion(idx, 'up')}
+                      onMoveDown={() => handleMoveQuestion(idx, 'down')}
+                      onRemove={() => handleRemoveQuestion(idx)}
+                      onDuplicate={() => handleDuplicateQuestion(idx)}
+                      onChange={(fields) => handleQuestionChange(idx, fields)}
+                      onDragStart={(e) => {
+                        setDraggedIndex(idx);
+                        e.dataTransfer.effectAllowed = 'move';
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (draggedIndex === null || draggedIndex === idx) return;
+                        const updated = [...questions];
+                        const [draggedItem] = updated.splice(draggedIndex, 1);
+                        updated.splice(idx, 0, draggedItem);
+                        setQuestions(updated);
+                        setDraggedIndex(null);
+                      }}
+                      onDragEnd={() => setDraggedIndex(null)}
+                      isDragged={draggedIndex === idx}
+                    />
+                  </ErrorBoundary>
                 );
               })}
             </div>
@@ -646,7 +543,7 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
           <button
             type="button"
             onClick={onCancel}
-            className="bg-slate-900 hover:bg-slate-850 text-slate-400 hover:text-slate-300 border border-slate-800 text-xs py-2.5 px-6 rounded-xl cursor-pointer transition-all"
+            className="bg-slate-900 hover:bg-slate-855 text-slate-400 hover:text-slate-300 border border-slate-800 text-xs py-2.5 px-6 rounded-xl cursor-pointer transition-all"
             style={{ minHeight: '40px' }}
           >
             Cancel
@@ -684,4 +581,12 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
 
     </div>
   );
+}
+
+// Inline helper fallback if not passed down via context
+function displayMessage(text: string, type: 'success' | 'error') {
+  if (typeof window !== 'undefined') {
+    const event = new CustomEvent('lingopeak_message', { detail: { text, type } });
+    window.dispatchEvent(event);
+  }
 }

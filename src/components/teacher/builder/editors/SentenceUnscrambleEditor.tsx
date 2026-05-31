@@ -1,17 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Question } from '@/lib/worksheet-types';
+import { SentenceUnscrambleQuestion } from '@/lib/worksheet-types';
 
 interface SentenceUnscrambleEditorProps {
-  question: Question;
-  onChange: (fields: Partial<Question>) => void;
+  question: SentenceUnscrambleQuestion;
+  onChange: (fields: Partial<SentenceUnscrambleQuestion>) => void;
 }
 
 export default function SentenceUnscrambleEditor({ question, onChange }: SentenceUnscrambleEditorProps) {
   const [rawText, setRawText] = useState(question.words ? question.words.join(' ') : '');
 
-  // Synchronize state when question changes externally
   useEffect(() => {
     setRawText(question.words ? question.words.join(' ') : '');
   }, [question.words]);

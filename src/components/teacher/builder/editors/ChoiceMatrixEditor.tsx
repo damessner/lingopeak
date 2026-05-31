@@ -1,10 +1,10 @@
 'use client';
 
-import { Question } from '@/lib/worksheet-types';
+import { ChoiceMatrixQuestion } from '@/lib/worksheet-types';
 
 interface ChoiceMatrixEditorProps {
-  question: Question;
-  onChange: (fields: Partial<Question>) => void;
+  question: ChoiceMatrixQuestion;
+  onChange: (fields: Partial<ChoiceMatrixQuestion>) => void;
 }
 
 export default function ChoiceMatrixEditor({ question, onChange }: ChoiceMatrixEditorProps) {

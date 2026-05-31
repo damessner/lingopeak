@@ -1,10 +1,10 @@
 'use client';
 
-import { Question } from '@/lib/worksheet-types';
+import { CategorySortingQuestion } from '@/lib/worksheet-types';
 
 interface CategorySortingEditorProps {
-  question: Question;
-  onChange: (fields: Partial<Question>) => void;
+  question: CategorySortingQuestion;
+  onChange: (fields: Partial<CategorySortingQuestion>) => void;
 }
 
 export default function CategorySortingEditor({ question, onChange }: CategorySortingEditorProps) {
