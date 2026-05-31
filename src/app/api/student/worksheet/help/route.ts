@@ -4,6 +4,7 @@ import { verifySession } from '@/lib/session';
 import { generateCompletion } from '@/lib/aiService';
 import db from '@/lib/db';
 import { getMemory, formatMemoryForPrompt } from '@/lib/hermesMemory';
+import { getActiveNotes, formatNotesForPrompt } from '@/lib/coachNotes';
 
 export async function POST(req: Request) {
   const cookieStore = await cookies();
@@ -44,6 +45,22 @@ export async function POST(req: Request) {
     const memory = getMemory(session.userId);
     const memoryBlock = formatMemoryForPrompt(memory);
 
+    // Fetch scaffolding level
+    const scafRow = db.prepare(
+      "SELECT value FROM student_memories WHERE student_id = ? AND key = 'scaffolding_level'"
+    ).get(session.userId) as { value: string } | undefined;
+    const scafLevel = scafRow?.value ?? 'MODERATE';
+
+    const scafInstruction = scafLevel === 'MAXIMUM'
+      ? '\n- This student needs MAXIMUM scaffolding. Break down every step. Give very short, simple, easy-to-understand hints.'
+      : scafLevel === 'MINIMAL'
+        ? '\n- This student needs MINIMAL scaffolding. Give light, indirect nudges and push for precision.'
+        : '\n- This student needs MODERATE scaffolding. Guide them and confirm understanding at each step.';
+
+    // Fetch Coach narrative notes
+    const notes = getActiveNotes(session.userId, 10, true);
+    const notesBlock = formatNotesForPrompt(notes);
+
     // 3. Construct prompt
     const systemPrompt = `You are Coach, a friendly and supportive Socratic AI learning assistant on LingoPeak.
 The student is currently working on the worksheet "${worksheet.title}".
@@ -56,9 +73,9 @@ CRITICAL RULE:
 You NEVER give the student the correct answer. You must help them figure it out themselves.
 Guidelines:
 - Reference the question type and guide them through the reasoning without revealing the answer.
-- Give extremely short hints (1-2 sentences) matching their scaffolding level.
+- Give extremely short hints (1-2 sentences) matching their scaffolding level.${scafInstruction}
 - If they are completely wrong or stuck, give them a hint about the rule or pattern, never the word or answer.
-- Keep your tone warm, encouraging, and Socratic.${memoryBlock}`;
+- Keep your tone warm, encouraging, and Socratic.${notesBlock}${memoryBlock}`;
 
     const formattedHistory = history
       .map(m => `${m.role === 'user' ? 'Student' : 'Coach'}: ${m.content}`)

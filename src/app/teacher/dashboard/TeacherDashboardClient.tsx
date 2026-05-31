@@ -13,6 +13,8 @@ interface Student {
   avatar_emoji: string;
   class_name: string | null;
   class_id: string | null;
+  active_note_count?: number;
+  high_note_count?: number;
 }
 
 interface PendingStaff {
@@ -102,6 +104,157 @@ export default function TeacherDashboardClient({
   const displayMessage = (text: string, type: 'success' | 'error') => {
     setMessage({ text, type });
     setTimeout(() => setMessage(null), 5000);
+  };
+
+  // Coach Notes Modal state
+  const [selectedStudentForNotes, setSelectedStudentForNotes] = useState<Student | null>(null);
+  const [studentNotes, setStudentNotes] = useState<any[]>([]);
+  const [studentGoals, setStudentGoals] = useState<any[]>([]);
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [newNoteContent, setNewNoteContent] = useState('');
+  const [newNoteCategory, setNewNoteCategory] = useState('general');
+  const [newNotePriority, setNewNotePriority] = useState<'low' | 'normal' | 'high'>('normal');
+
+  const handleOpenNotesModal = async (student: Student) => {
+    setSelectedStudentForNotes(student);
+    setNotesLoading(true);
+    setStudentNotes([]);
+    setStudentGoals([]);
+    setNewNoteContent('');
+    setNewNoteCategory('general');
+    setNewNotePriority('normal');
+
+    try {
+      // 1. Fetch coach notes
+      const notesRes = await fetch(`/api/teacher/coach/notes?studentId=${student.id}`);
+      if (notesRes.ok) {
+        const notesData = await notesRes.json();
+        setStudentNotes(notesData.notes || []);
+      }
+
+      // 2. Fetch memory entries to extract goals
+      const memoryRes = await fetch(`/api/teacher/hermes/memory?studentId=${student.id}`);
+      if (memoryRes.ok) {
+        const memoryData = await memoryRes.json();
+        const entries = memoryData.entries || [];
+        const goals = entries
+          .filter((e: any) => e.key.startsWith('goal_'))
+          .map((e: any) => {
+            try {
+              const parsed = JSON.parse(e.value);
+              return { key: e.key, ...parsed };
+            } catch {
+              return { key: e.key, text: e.value, created: e.updated_at.split(' ')[0], status: 'active' };
+            }
+          });
+        setStudentGoals(goals);
+      }
+    } catch (err) {
+      console.error('Failed to load notes/goals:', err);
+    } finally {
+      setNotesLoading(false);
+    }
+  };
+
+  const handleAddNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStudentForNotes || !newNoteContent.trim()) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch('/api/teacher/coach/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: selectedStudentForNotes.id,
+          category: newNoteCategory,
+          content: newNoteContent.trim(),
+          priority: newNotePriority
+        })
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to add note');
+      }
+
+      displayMessage('Note added successfully!', 'success');
+
+      // Refresh notes list
+      const notesRes = await fetch(`/api/teacher/coach/notes?studentId=${selectedStudentForNotes.id}`);
+      if (notesRes.ok) {
+        const notesData = await notesRes.json();
+        setStudentNotes(notesData.notes || []);
+
+        // Also update note counts in the main students list dynamically!
+        setStudents(prev =>
+          prev.map(s => {
+            if (s.id === selectedStudentForNotes.id) {
+              const activeCount = notesData.notes.length;
+              const highCount = notesData.notes.filter((n: any) => n.priority === 'high').length;
+              return {
+                ...s,
+                active_note_count: activeCount,
+                high_note_count: highCount
+              };
+            }
+            return s;
+          })
+        );
+      }
+      setNewNoteContent('');
+    } catch (err: any) {
+      displayMessage(err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteNote = async (noteId: string) => {
+    if (!confirm('Are you sure you want to archive this note? It will no longer be active.')) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/teacher/coach/notes?id=${noteId}`, {
+        method: 'DELETE'
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to archive note');
+      }
+
+      displayMessage('Note archived successfully!', 'success');
+
+      // Refresh notes list
+      if (selectedStudentForNotes) {
+        const notesRes = await fetch(`/api/teacher/coach/notes?studentId=${selectedStudentForNotes.id}`);
+        if (notesRes.ok) {
+          const notesData = await notesRes.json();
+          setStudentNotes(notesData.notes || []);
+
+          // Also update note counts in the main students list dynamically!
+          setStudents(prev =>
+            prev.map(s => {
+              if (s.id === selectedStudentForNotes.id) {
+                const activeCount = notesData.notes.length;
+                const highCount = notesData.notes.filter((n: any) => n.priority === 'high').length;
+                return {
+                  ...s,
+                  active_note_count: activeCount,
+                  high_note_count: highCount
+                };
+              }
+              return s;
+            })
+          );
+        }
+      }
+    } catch (err: any) {
+      displayMessage(err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Check for tab parameter in URL
@@ -552,7 +705,7 @@ export default function TeacherDashboardClient({
                 : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:text-slate-200'
             }`}
           >
-            🤖 Hermes &amp; Teams
+            🤖 Coach &amp; Teams
           </button>
           {sessionRole === 'ADMIN' && (
             <button
@@ -898,6 +1051,19 @@ export default function TeacherDashboardClient({
                       </Link>
                       
                       <button
+                        onClick={() => handleOpenNotesModal(st)}
+                        className={`text-[10px] font-bold py-1.5 px-3 rounded-lg border transition-all cursor-pointer ${
+                          st.active_note_count && st.active_note_count > 0
+                            ? (st.high_note_count && st.high_note_count > 0
+                              ? 'bg-red-950/45 border-red-500/40 text-red-300 hover:bg-red-900/40 hover:border-red-400/40 shadow-lg shadow-red-500/10'
+                              : 'bg-indigo-950/40 border-indigo-500/40 text-indigo-300 hover:bg-indigo-900/40 hover:border-indigo-400/40 shadow-lg shadow-indigo-500/10')
+                            : 'bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        Notes {st.active_note_count !== undefined && st.active_note_count > 0 ? `(${st.active_note_count})` : ''}
+                      </button>
+                      
+                      <button
                         onClick={() => handleResetPassword(st.id, st.username)}
                         className="bg-slate-900 hover:bg-red-950/20 text-[10px] text-slate-400 hover:text-red-300 font-bold border border-slate-800 hover:border-red-500/20 py-1.5 px-3 rounded-lg cursor-pointer"
                       >
@@ -1217,6 +1383,190 @@ export default function TeacherDashboardClient({
         )}
 
       </main>
+
+      {/* 📝 Coach Notes Modal */}
+      {selectedStudentForNotes && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl">
+            
+            {/* Header */}
+            <div className="p-6 border-b border-slate-800/80 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl select-none">{selectedStudentForNotes.avatar_emoji}</span>
+                <div>
+                  <h3 className="text-lg font-black text-white">{selectedStudentForNotes.username}'s Coaching Profile</h3>
+                  <p className="text-xs text-slate-400">View goals and narrative observations from teachers and AI.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedStudentForNotes(null)}
+                className="text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-850 p-2 rounded-xl transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Content Area */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              
+              {/* Active Goals Section */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-black text-indigo-400 uppercase tracking-widest">🎯 Active Learning Goals</h4>
+                {notesLoading ? (
+                  <p className="text-xs text-slate-500">Loading goals...</p>
+                ) : studentGoals.length === 0 ? (
+                  <p className="text-xs text-slate-500 italic">No active learning goals tracked for this student.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {studentGoals.map((goal) => (
+                      <div
+                        key={goal.key}
+                        className={`p-3 rounded-xl border ${
+                          goal.status === 'completed'
+                            ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-300'
+                            : 'bg-slate-950/40 border-slate-850 text-slate-300'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start gap-2">
+                          <span className="text-xs font-bold leading-tight">{goal.text}</span>
+                          <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded ${
+                            goal.status === 'completed'
+                              ? 'bg-emerald-500/20 text-emerald-300'
+                              : 'bg-indigo-500/20 text-indigo-300'
+                          }`}>
+                            {goal.status}
+                          </span>
+                        </div>
+                        <div className="text-[9px] text-slate-500 mt-2">Added: {goal.created}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Add Note Form */}
+              <div className="border-t border-slate-800 pt-6 space-y-3">
+                <h4 className="text-xs font-black text-indigo-400 uppercase tracking-widest">📝 Log New Observation</h4>
+                <form onSubmit={handleAddNote} className="space-y-3">
+                  <textarea
+                    placeholder="Enter observation (e.g. Grammar struggles, engagement tip, or homework progress)..."
+                    value={newNoteContent}
+                    onChange={(e) => setNewNoteContent(e.target.value)}
+                    required
+                    className="w-full bg-slate-950 border border-slate-850 focus:border-indigo-500 rounded-xl p-3 text-xs text-slate-200 outline-none min-h-[70px] resize-none"
+                  />
+                  <div className="flex gap-3 flex-wrap justify-between items-center">
+                    <div className="flex gap-3 flex-wrap">
+                      {/* Category select */}
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <span className="text-slate-400 text-[10px] font-bold">Category:</span>
+                        <select
+                          value={newNoteCategory}
+                          onChange={(e) => setNewNoteCategory(e.target.value)}
+                          className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-slate-300 text-[11px] font-bold cursor-pointer"
+                        >
+                          <option value="general">General</option>
+                          <option value="grammar">Grammar</option>
+                          <option value="vocabulary">Vocabulary</option>
+                          <option value="confidence">Confidence</option>
+                          <option value="engagement">Engagement</option>
+                        </select>
+                      </div>
+
+                      {/* Priority select */}
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <span className="text-slate-400 text-[10px] font-bold">Priority:</span>
+                        <select
+                          value={newNotePriority}
+                          onChange={(e) => setNewNotePriority(e.target.value as any)}
+                          className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-slate-300 text-[11px] font-bold cursor-pointer"
+                        >
+                          <option value="low">Low</option>
+                          <option value="normal">Normal</option>
+                          <option value="high">High</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2 px-5 rounded-xl border border-indigo-400/20 transition-all cursor-pointer shadow-md"
+                    >
+                      Save Observation
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Observations List */}
+              <div className="border-t border-slate-800 pt-6 space-y-3">
+                <h4 className="text-xs font-black text-indigo-400 uppercase tracking-widest">📋 Active Observations ({studentNotes.length})</h4>
+                
+                {notesLoading ? (
+                  <p className="text-xs text-slate-500">Loading observations...</p>
+                ) : studentNotes.length === 0 ? (
+                  <p className="text-xs text-slate-500 italic">No active observations recorded for this pupil.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {studentNotes.map((note: any) => {
+                      let priorityColor = 'border-slate-800 bg-slate-950/20 text-slate-300';
+                      if (note.priority === 'high') {
+                        priorityColor = 'border-red-500/30 bg-red-950/10 text-red-200';
+                      } else if (note.priority === 'normal') {
+                        priorityColor = 'border-indigo-500/20 bg-indigo-950/5 text-indigo-200';
+                      }
+
+                      return (
+                        <div
+                          key={note.id}
+                          className={`p-4 rounded-2xl border flex justify-between gap-4 items-start ${priorityColor}`}
+                        >
+                          <div className="space-y-1.5 flex-1">
+                            <div className="flex gap-2 flex-wrap items-center">
+                              <span className="text-[10px] font-black uppercase bg-slate-850 px-2 py-0.5 rounded text-indigo-300">
+                                {note.category}
+                              </span>
+                              <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded ${
+                                note.priority === 'high' ? 'bg-red-500/20 text-red-300' : 'bg-slate-800 text-slate-400'
+                              }`}>
+                                {note.priority}
+                              </span>
+                              <span className="text-[9px] text-slate-500 font-semibold">
+                                Source: {note.source} • {new Date(note.created_at).toLocaleDateString()}
+                              </span>
+                            </div>
+                            <p className="text-xs leading-relaxed">{note.content}</p>
+                          </div>
+                          
+                          <button
+                            onClick={() => handleDeleteNote(note.id)}
+                            className="text-slate-500 hover:text-red-400 text-xs font-bold p-1 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                            title="Archive Observation"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-slate-950/40 border-t border-slate-800 flex justify-end">
+              <button
+                onClick={() => setSelectedStudentForNotes(null)}
+                className="bg-slate-850 hover:bg-slate-800 text-slate-300 font-bold text-xs py-2 px-6 rounded-xl border border-slate-700 cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* PWA Footer */}
       <footer className="border-t border-slate-900 bg-slate-950 py-6 text-center text-xs text-slate-500 mt-auto no-print">

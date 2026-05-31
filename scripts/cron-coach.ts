@@ -10,10 +10,11 @@
  *  3. Save the tip as a tutor_message (origin = 'cron') so it surfaces in chat
  *  4. Alert the class teacher via MS Teams Incoming Webhook if enabled
  *  5. Run weekly class-average report to teacher
+ *  6. Run weekly-recap to generate student summaries, archive old notes, and broadcast progress
  *
  * Recommended cron schedule (crontab or Task Scheduler):
  *   0 8 * * 1-5   (Mon–Fri at 08:00)
- *   0 17 * * 5    (Friday 17:00 for weekly report)
+ *   0 17 * * 5    (Friday 17:00 for weekly report & weekly-recap)
  */
 
 import 'dotenv/config';
@@ -26,7 +27,7 @@ import { sendTeamsNotification, notifyTeacherStruggle, notifyTeacherWeeklyReport
 // ── DB connection ─────────────────────────────────────────────────────────────
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, '../lingopeak.db');
+const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, '../dev.db');
 const db = new Database(DB_PATH);
 
 // ── AI helper (lightweight, no Next.js imports) ───────────────────────────────
@@ -64,16 +65,27 @@ interface Student {
   class_id: string | null;
 }
 
-interface Struggle {
-  category_name: string;
-  avg_score: number;
-  attempt_count: number;
-}
-
 interface Teacher {
   id: string;
   username: string;
   teams_webhook_url: string | null;
+}
+
+// ── Coach Note Helper ─────────────────────────────────────────────────────────
+
+function addCoachNoteDirect(
+  studentId: string,
+  category: string,
+  content: string,
+  priority: 'low' | 'normal' | 'high' = 'normal',
+  source: 'ai' | 'teacher' | 'cron' = 'ai'
+): string {
+  const id = crypto.randomUUID();
+  db.prepare(`
+    INSERT INTO coach_notes (id, student_id, category, content, priority, source)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(id, studentId, category.toLowerCase(), content.trim(), priority, source);
+  return id;
 }
 
 // ── Per-student coaching logic ───────────────────────────────────────────────
@@ -183,6 +195,15 @@ Make it specific to the topic, practical, and warm. Do NOT mention scores or sta
     VALUES (?, ?, 'assistant', ?, 'cron', CURRENT_TIMESTAMP)
   `).run(msgId, student.id, tip.trim());
 
+  // Also log to coach_notes
+  addCoachNoteDirect(
+    student.id,
+    selectedCategory.toLowerCase(),
+    `Coach detected struggle in ${categoryLabel}. Auto-generated practice tip sent to chat.`,
+    'normal',
+    'cron'
+  );
+
   // Update memory review date
   const categoryKey = `last_reviewed_${selectedCategory.toLowerCase()}`;
   const todayStr = today.toISOString().split('T')[0];
@@ -241,6 +262,20 @@ async function runDailyCoach(): Promise<void> {
         console.error(`  [${batch[j].username}] Error:`, r.reason);
       }
     });
+  }
+
+  // Also clean up old non-priority notes for all students
+  for (const student of students) {
+    try {
+      db.prepare(`
+        UPDATE coach_notes
+        SET is_active = 0
+        WHERE student_id = ? AND is_active = 1 AND priority != 'high'
+          AND created_at < datetime('now', '-14 days')
+      `).run(student.id);
+    } catch (e) {
+      console.error(`  [${student.username}] Error running daily notes cleanup:`, e);
+    }
   }
 
   console.log('[cron-coach] Daily run complete.');
@@ -306,12 +341,129 @@ async function runWeeklyReport(): Promise<void> {
   }
 }
 
+// ── Weekly student recap ──────────────────────────────────────────────────────
+
+async function runWeeklyRecap(): Promise<void> {
+  console.log('[cron-coach] Running weekly student progress recaps…');
+
+  const students = db
+    .prepare("SELECT id, username, class_id FROM users WHERE role = 'STUDENT'")
+    .all() as Student[];
+
+  console.log(`[cron-coach] Found ${students.length} students.`);
+
+  for (const student of students) {
+    try {
+      // 1. Fetch worksheet attempts in the last 7 days
+      const weeklyAttempts = db.prepare(`
+        SELECT a.score, w.title, c.name as category_name
+        FROM attempts a
+        JOIN worksheets w ON a.worksheet_id = w.id
+        JOIN categories c ON w.category_id = c.id
+        WHERE a.student_id = ? AND a.completed_at >= datetime('now', '-7 days')
+      `).all(student.id) as Array<{ score: number; title: string; category_name: string }>;
+
+      // 2. Chat count in the last 7 days
+      const chatRow = db.prepare(`
+        SELECT COUNT(*) as count FROM tutor_messages
+        WHERE student_id = ? AND created_at >= datetime('now', '-7 days')
+      `).get(student.id) as { count: number } | undefined;
+      const chatCount = chatRow?.count || 0;
+
+      // 3. Badges count in the last 7 days
+      const badgeRow = db.prepare(`
+        SELECT COUNT(*) as count FROM badges
+        WHERE student_id = ? AND earned_at >= datetime('now', '-7 days')
+      `).get(student.id) as { count: number } | undefined;
+      const badgeCount = badgeRow?.count || 0;
+
+      const avgScore = weeklyAttempts.length > 0
+        ? Math.round(weeklyAttempts.reduce((sum, a) => sum + a.score, 0) / weeklyAttempts.length)
+        : null;
+
+      const recapPrompt = `You are Coach, a friendly, encouraging Socratic AI ESL learning companion.
+Write a weekly progress recap summary (3-4 sentences) for student "${student.username}".
+Here is their activity in the last 7 days:
+- Worksheets completed: ${weeklyAttempts.length}
+- Average score on those worksheets: ${avgScore !== null ? `${avgScore}%` : 'No worksheets completed'}
+- Tutor messages exchanged: ${chatCount}
+- New badges earned: ${badgeCount}
+
+Summarize their achievements, praise their effort (be warm and supportive), highlight any areas they spent time on, and give them a small focus or friendly tip for the upcoming week. Speak directly to the student.`;
+
+      const recap = await callAI(recapPrompt);
+      if (!recap.trim()) continue;
+
+      // Save recap to student chat
+      const msgId = crypto.randomUUID();
+      db.prepare(`
+        INSERT INTO tutor_messages (id, student_id, role, content, origin, created_at)
+        VALUES (?, ?, 'assistant', ?, 'cron', CURRENT_TIMESTAMP)
+      `).run(msgId, student.id, recap.trim());
+
+      // Save recap coach note
+      const noteContent = `Coach generated weekly recap for student. Average score: ${avgScore !== null ? `${avgScore}%` : 'N/A'}. Badges earned: ${badgeCount}.`;
+      addCoachNoteDirect(student.id, 'general', noteContent, 'normal', 'cron');
+
+      // 4. Archive old notes (cleanup note bloat)
+      // Keep only high-priority notes from the last 7 days
+      const recentHigh = db.prepare(`
+        SELECT * FROM coach_notes
+        WHERE student_id = ? AND priority = 'high' AND is_active = 1
+          AND created_at >= datetime('now', '-7 days')
+      `).all(student.id) as Array<{ id: string }>;
+
+      // Archive all active notes
+      db.prepare('UPDATE coach_notes SET is_active = 0 WHERE student_id = ? AND is_active = 1').run(student.id);
+
+      // Restore only the recent high-priority ones
+      for (const note of recentHigh) {
+        db.prepare('UPDATE coach_notes SET is_active = 1 WHERE id = ?').run(note.id);
+      }
+
+      console.log(`  [${student.username}] Weekly recap saved and notes archived.`);
+
+      // 5. Teams broadcast progress card to teacher
+      if (student.class_id) {
+        const teacher = db.prepare(`
+          SELECT u.username, u.teams_webhook_url
+          FROM users u
+          JOIN classes c ON c.teacher_id = u.id
+          WHERE c.id = ?
+        `).get(student.class_id) as Teacher | undefined;
+
+        if (teacher?.teams_webhook_url) {
+          await sendTeamsNotification(teacher.teams_webhook_url, {
+            title: `📋 Weekly Progress Recap: ${student.username}`,
+            subtitle: `LingoPeak — Learning Coach Report`,
+            body: `Here is the performance summary for **${student.username}** over the past 7 days:`,
+            facts: [
+              { name: 'Worksheets Completed', value: `${weeklyAttempts.length}` },
+              { name: 'Average Score', value: avgScore !== null ? `${avgScore}%` : 'N/A' },
+              { name: 'Chat Interactions', value: `${chatCount} messages` },
+              { name: 'Badges Earned', value: `${badgeCount}` }
+            ],
+            actionUrl: process.env.NEXT_PUBLIC_APP_URL,
+            actionLabel: 'View Dashboard'
+          });
+        }
+      }
+    } catch (err) {
+      console.error(`  [${student.username}] Error in weekly recap:`, err);
+    }
+  }
+
+  console.log('[cron-coach] Weekly recaps complete.');
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 const mode = process.argv[2] ?? 'daily';
 
 if (mode === 'weekly') {
   runWeeklyReport().catch(console.error);
+} else if (mode === 'weekly-recap') {
+  runWeeklyRecap().catch(console.error);
 } else {
   runDailyCoach().catch(console.error);
 }

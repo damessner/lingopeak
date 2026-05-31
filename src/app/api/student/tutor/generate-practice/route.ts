@@ -36,9 +36,19 @@ export async function POST(req: Request) {
     const cappedCount = Math.min(Math.max(Number(count) || 3, 1), 10);
     const worksheetId = crypto.randomUUID();
 
+    const TYPE_BY_CATEGORY: Record<string, string> = {
+      GRAMMAR: 'multiple_choice',
+      VOCABULARY: 'drag_and_drop',
+      READING: 'matching_pairs',
+      WRITING: 'fill_in_gap',
+      LISTENING: 'multiple_choice',
+    };
+
+    const qType = TYPE_BY_CATEGORY[categoryName.toUpperCase()] ?? 'multiple_choice';
+
     // 2. Generate worksheet questions using AI
     const prompt = `You are an expert ESL curriculum designer creating a personalized practice worksheet for the LingoPeak platform.
-Generate exactly ${cappedCount} multiple choice questions about the topic: "${topic.trim()}"
+Generate exactly ${cappedCount} "${qType}" questions about the topic: "${topic.trim()}"
 Keep it appropriate for middle/high school English learners.
 
 Return ONLY a valid JSON object (no markdown, no explanation) in this format:
@@ -47,14 +57,19 @@ Return ONLY a valid JSON object (no markdown, no explanation) in this format:
   "instructions": "...",
   "questions": [
     {
-      "type": "multiple_choice",
+      "type": "${qType}",
       "question": "...",
-      "options": ["...", "...", "...", "..."],
-      "correctAnswer": "...",
+      ${qType === 'multiple_choice' ? `"options": ["option A", "option B", "option C", "option D"],\n      "correctAnswer": "option A",` : ''}${qType === 'drag_and_drop' ? `"sentences": ["sentence 1 with [bracketed] gap", "sentence 2 with [bracketed] gap"],\n      "words": ["correct_word_1", "correct_word_2", "distractor_1", "distractor_2"],` : ''}${qType === 'matching_pairs' ? `"pairs": {"term 1": "match 1", "term 2": "match 2"},` : ''}${qType === 'fill_in_gap' ? `"text": "passage with [bracketed] gaps. Example: She [drives] (drive) to school.",` : ''}
       "explanation": "..."
     }
   ]
 }
+
+Type-specific requirements for "${qType}":
+- multiple_choice: 4 options, one correct.
+- drag_and_drop: "sentences" is an array of sentences containing bracketed gaps, e.g. "I [have] a pet.", "words" is a flat array of all correct answers plus 2-3 distractors.
+- matching_pairs: "pairs" is a key-value object of terms matching definitions.
+- fill_in_gap: "text" is a passage where gaps are wrapped in brackets, e.g., "The cat [is] (be) sleeping on [the] floor."
 Return valid JSON only.`;
 
     let raw: string;
@@ -72,14 +87,26 @@ Return valid JSON only.`;
       return NextResponse.json({ error: 'AI returned invalid JSON. Try again.', raw }, { status: 422 });
     }
 
-    const normalisedQuestions = (parsed.questions ?? []).map((q: any, idx: number) => ({
-      id: `q_practice_${idx}`,
-      type: 'multiple_choice',
-      question: q.question ?? '',
-      options: q.options ?? [],
-      correctAnswer: q.correctAnswer ?? '',
-      explanation: q.explanation ?? ''
-    }));
+    const normalisedQuestions = (parsed.questions ?? []).map((q: any, idx: number) => {
+      const base: any = {
+        id: `q_practice_${idx}`,
+        type: q.type ?? qType,
+        question: q.question ?? q.text ?? '',
+        explanation: q.explanation ?? ''
+      };
+      if (qType === 'multiple_choice') {
+        base.options = q.options ?? [];
+        base.correctAnswer = q.correctAnswer ?? '';
+      } else if (qType === 'drag_and_drop') {
+        base.sentences = q.sentences ?? [];
+        base.words = q.words ?? [];
+      } else if (qType === 'matching_pairs') {
+        base.pairs = q.pairs ?? {};
+      } else if (qType === 'fill_in_gap') {
+        base.text = q.text ?? q.question ?? '';
+      }
+      return base;
+    });
 
     // 3. Insert into worksheets table
     db.prepare(`

@@ -7,8 +7,17 @@ import crypto from 'crypto';
 import {
   getMemory,
   formatMemoryForPrompt,
-  parseAndPersistMemoryUpdates
+  parseAndPersistMemoryUpdates,
+  getGoals,
+  formatGoalsForPrompt
 } from '@/lib/hermesMemory';
+import {
+  getActiveNotes,
+  formatNotesForPrompt,
+  parseAndPersistCoachNotes,
+  addCoachNote
+} from '@/lib/coachNotes';
+import { notifyTeacherStruggle } from '@/lib/teamsNotify';
 
 export async function POST(req: Request) {
   const cookieStore = await cookies();
@@ -47,6 +56,14 @@ export async function POST(req: Request) {
     // Persistent Hermes memory
     const memory = getMemory(session.userId);
     const memoryBlock = formatMemoryForPrompt(memory);
+
+    // Persistent active goals
+    const goalsBefore = getGoals(session.userId);
+    const goalsBlock = formatGoalsForPrompt(goalsBefore);
+
+    // Persistent coach notes (excluding teacher observations)
+    const notes = getActiveNotes(session.userId, 10, true);
+    const notesBlock = formatNotesForPrompt(notes);
 
     // Recent struggles (score < 80)
     const struggles = db.prepare(`
@@ -96,6 +113,86 @@ export async function POST(req: Request) {
       `).run(session.userId, dbLevel);
     }
 
+    // ── Persistent Struggle & Escalation ──────────────────────────────────
+    const repeatedStruggles = db.prepare(`
+      SELECT c.name as category_name, COUNT(*) as fail_count
+      FROM attempts a
+      JOIN worksheets w ON a.worksheet_id = w.id
+      JOIN categories c ON w.category_id = c.id
+      WHERE a.student_id = ? AND a.score < 60 AND a.completed_at >= datetime('now', '-14 days')
+      GROUP BY c.name
+      HAVING fail_count >= 3
+    `).all(session.userId) as Array<{ category_name: string; fail_count: number }>;
+
+    for (const struggle of repeatedStruggles) {
+      const catLower = struggle.category_name.toLowerCase();
+      const alreadyLogged = db.prepare(`
+        SELECT id FROM coach_notes
+        WHERE student_id = ? AND category = ? AND priority = 'high'
+          AND created_at >= datetime('now', '-14 days')
+        LIMIT 1
+      `).get(session.userId, catLower);
+
+      if (!alreadyLogged) {
+        const noteContent = `Student has failed 3+ attempts in ${struggle.category_name} in the last 14 days. Handover to human teacher recommended.`;
+        addCoachNote(session.userId, struggle.category_name, noteContent, 'high', 'ai');
+
+        if (session.classId) {
+          const teacher = db.prepare(`
+            SELECT u.username, u.teams_webhook_url
+            FROM users u
+            JOIN classes c ON c.teacher_id = u.id
+            WHERE c.id = ?
+          `).get(session.classId) as { username: string; teams_webhook_url: string | null } | undefined;
+
+          if (teacher?.teams_webhook_url) {
+            try {
+              await notifyTeacherStruggle({
+                webhookUrl: teacher.teams_webhook_url,
+                teacherName: teacher.username,
+                studentName: session.username,
+                topicName: struggle.category_name,
+                score: 50,
+                platformUrl: process.env.NEXT_PUBLIC_APP_URL
+              });
+            } catch (err) {
+              console.error('Failed to notify teacher of persistent struggle:', err);
+            }
+          }
+        }
+      }
+    }
+
+    // ── Uncertainty Check ──────────────────────────────────────────────────
+    const uncertaintyRegex = /\b(not sure|don't know|dont know|confused|too hard|can't do|cant do|don't understand|dont understand|am i right|is this right)\b/i;
+    if (uncertaintyRegex.test(message)) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const alreadyLoggedToday = db.prepare(`
+        SELECT id FROM coach_notes
+        WHERE student_id = ? AND category = 'confidence' AND created_at >= ?
+        LIMIT 1
+      `).get(session.userId, todayStr + ' 00:00:00');
+
+      if (!alreadyLoggedToday) {
+        addCoachNote(
+          session.userId,
+          'confidence',
+          `Student expressed uncertainty or difficulty: "${message.trim()}"`,
+          'normal',
+          'ai'
+        );
+      }
+    }
+
+    // ── Session Modulo Turns ───────────────────────────────────────────────
+    const msgCountRow = db.prepare('SELECT COUNT(*) as count FROM tutor_messages WHERE student_id = ?').get(session.userId) as { count: number };
+    const totalMessages = msgCountRow.count;
+
+    let sessionSummaryInstruction = '';
+    if (totalMessages > 0 && totalMessages % 5 === 0) {
+      sessionSummaryInstruction = `\n\n[CRITICAL SYSTEM INSTRUCTION]\n- This is the 5th message block of this interaction segment. You MUST generate a brief narrative summary of the student's recent performance, grammar retention, or engagement, and persist it by appending this tag at the very end of your response: <!--COACH_NOTE:{"category":"general","content":"[your summary here]","priority":"normal"}-->. Make it concise (1-2 sentences) and professional.`;
+    }
+
     let struggleContext = '';
     if (struggles.length > 0) {
       struggleContext = `\n\nRecent Student Gaps & Mistakes (Help the student practice these topics contextually):\n` +
@@ -125,8 +222,10 @@ Rules:
 - Correct grammar or spelling mistakes politely if you notice them in the student's text, guiding them to self-correct.
 - Provide word stress guides in capital letters inside brackets for multi-syllabic vocabulary words that may be difficult (e.g., de-VEL-op, pho-to-GRAPH-ic, par-TIC-u-lar) to guide the student's pronunciation.
 - When the student shares a personal goal, name, preferred topic, or important fact, embed a <!--MEMORY_UPDATE:{"key":"value"}--> tag at the very end of your reply (hidden from the student). Use snake_case keys like "learning_goal", "name", "weak_area", "last_topic". Never show these tags directly.
+- Goal Update Rule: When the student shares a learning goal, create a unique goal ID (e.g. goal_1234) and save it in memory with: <!--MEMORY_UPDATE:{"goal_1234":"{\\\"text\\\":\\\"improve past tense\\\",\\\"created\\\":\\\"2026-05-31\\\",\\\"status\\\":\\\"active\\\"}"}-->.
+- Goal Completion Rule: When a student says they've mastered a skill or completed a goal, confirm with them first: "Would you like to mark '[goal_text]' as complete?". Only mark it complete (by outputting status 'completed' in a memory update tag like <!--MEMORY_UPDATE:{"goal_[id]":"{\\\"text\\\":\\\"...\\\",\\\"created\\\":\\\"...\\\",\\\"status\\\":\\\"completed\\\"}"}-->) if they explicitly agree. Do NOT mark a goal complete unilaterally.
 - When you want to assign/create a practice worksheet for a student (e.g. because they need more practice on a topic), embed a <!--CREATE_PRACTICE:{"category":"GRAMMAR", "topic":"present perfect"}--> tag in your reply. Note: valid categories are GRAMMAR, VOCABULARY, READING, WRITING, LISTENING.
-${scaffoldingInstruction}${struggleContext}${masteryContext}${memoryBlock}`;
+${scaffoldingInstruction}${struggleContext}${masteryContext}${notesBlock}${goalsBlock}${memoryBlock}${sessionSummaryInstruction}`;
 
     // Format dialogue history
     const formattedHistory = (history || [])
@@ -140,6 +239,19 @@ ${scaffoldingInstruction}${struggleContext}${masteryContext}${memoryBlock}`;
 
     // Parse + persist any memory updates hidden in the reply, strip tags from student-visible text
     let cleanReply = parseAndPersistMemoryUpdates(session.userId, rawReply.trim());
+
+    // Check if any goals transitioned from active to completed
+    const goalsAfter = getGoals(session.userId);
+    for (const goalAfter of goalsAfter) {
+      const goalBefore = goalsBefore.find(g => g.key === goalAfter.key);
+      if (goalAfter.status === 'completed' && (!goalBefore || goalBefore.status === 'active')) {
+        const noteContent = `Student successfully completed learning goal: "${goalAfter.text}".`;
+        addCoachNote(session.userId, 'general', noteContent, 'high', 'ai');
+      }
+    }
+
+    // Parse + persist any coach notes hidden in the reply, strip tags from student-visible text
+    cleanReply = parseAndPersistCoachNotes(session.userId, cleanReply);
 
     // Parse + generate any worksheets requested by the AI inline
     const practicePattern = /<!--CREATE_PRACTICE:(.*?)-->/i;

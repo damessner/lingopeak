@@ -32,7 +32,14 @@ export default async function TeacherDashboard() {
 
   // 3. Fetch Student directory
   const students = db.prepare(`
-    SELECT u.id, u.username, u.avatar_emoji, u.class_id, c.name as class_name 
+    SELECT 
+      u.id, 
+      u.username, 
+      u.avatar_emoji, 
+      u.class_id, 
+      c.name as class_name,
+      (SELECT COUNT(*) FROM coach_notes cn WHERE cn.student_id = u.id AND cn.is_active = 1) as active_note_count,
+      (SELECT COUNT(*) FROM coach_notes cn WHERE cn.student_id = u.id AND cn.is_active = 1 AND cn.priority = 'high') as high_note_count
     FROM users u 
     LEFT JOIN classes c ON u.class_id = c.id 
     WHERE u.role = 'STUDENT' 

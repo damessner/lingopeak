@@ -103,3 +103,40 @@ export function parseAndPersistMemoryUpdates(studentId: string, text: string): s
   // Strip the memory-update tags from the reply shown to the student
   return text.replace(pattern, '').trim();
 }
+
+export interface StudentGoal {
+  key: string;
+  text: string;
+  created: string;
+  status: 'active' | 'completed';
+}
+
+export function getGoals(studentId: string): StudentGoal[] {
+  try {
+    const rows = db
+      .prepare("SELECT key, value FROM student_memories WHERE student_id = ? AND key LIKE 'goal_%'")
+      .all(studentId) as Array<{ key: string; value: string }>;
+    return rows.map(r => {
+      try {
+        const parsed = JSON.parse(r.value);
+        return { key: r.key, ...parsed } as StudentGoal;
+      } catch {
+        return {
+          key: r.key,
+          text: r.value,
+          created: new Date().toISOString().split('T')[0],
+          status: 'active'
+        } as StudentGoal;
+      }
+    });
+  } catch {
+    return [];
+  }
+}
+
+export function formatGoalsForPrompt(goals: StudentGoal[]): string {
+  const activeGoals = goals.filter(g => g.status === 'active');
+  if (activeGoals.length === 0) return '';
+  const lines = activeGoals.map(g => `- ${g.text} (set ${g.created})`).join('\n');
+  return `\n\n## Active Learning Goals\n${lines}\nReference these when relevant and encourage the student to make progress toward them.`;
+}

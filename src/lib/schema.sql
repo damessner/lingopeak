@@ -180,3 +180,20 @@ CREATE TABLE IF NOT EXISTS student_memories (
 );
 
 CREATE INDEX IF NOT EXISTS idx_student_memories_student ON student_memories(student_id);
+
+-- Coach narrative observations about students
+CREATE TABLE IF NOT EXISTS coach_notes (
+  id TEXT PRIMARY KEY,
+  student_id TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'general',  -- grammar, vocabulary, confidence, engagement, general
+  content TEXT NOT NULL,                       -- free-form observation, 1-3 sentences
+  priority TEXT NOT NULL DEFAULT 'normal',     -- low, normal, high
+  source TEXT NOT NULL DEFAULT 'ai',           -- 'ai', 'teacher', 'cron'
+  is_active INTEGER DEFAULT 1,                -- 1 = current, 0 = archived
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_coach_notes_student ON coach_notes(student_id);
+CREATE INDEX IF NOT EXISTS idx_coach_notes_active ON coach_notes(student_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_coach_notes_category ON coach_notes(student_id, category, is_active);

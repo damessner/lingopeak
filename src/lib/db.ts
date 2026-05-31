@@ -138,6 +138,28 @@ function initDb() {
       } catch (err: any) {}
     }
 
+    try {
+      db.prepare('SELECT id FROM coach_notes LIMIT 1').get();
+    } catch (e) {
+      console.log('Migrating: Creating coach_notes table...');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS coach_notes (
+          id TEXT PRIMARY KEY,
+          student_id TEXT NOT NULL,
+          category TEXT NOT NULL DEFAULT 'general',
+          content TEXT NOT NULL,
+          priority TEXT NOT NULL DEFAULT 'normal',
+          source TEXT NOT NULL DEFAULT 'ai',
+          is_active INTEGER DEFAULT 1,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_coach_notes_student ON coach_notes(student_id);
+        CREATE INDEX IF NOT EXISTS idx_coach_notes_active ON coach_notes(student_id, is_active);
+        CREATE INDEX IF NOT EXISTS idx_coach_notes_category ON coach_notes(student_id, category, is_active);
+      `);
+    }
+
     // 1.6 Legacy Account Invalidation Migration
     try {
       const legacyCountResult = db.prepare("SELECT count(*) as count FROM users WHERE password_salt IS NULL OR password_salt = ''").get() as any;
