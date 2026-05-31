@@ -28,10 +28,12 @@ interface WorksheetContainerProps {
     transcript?: string | null;
     isDialogue?: boolean | null;
   };
-  studentId: string;
+  studentId?: string; // Optional in preview
+  previewMode?: boolean;
+  onPreviewClose?: () => void;
 }
 
-export default function WorksheetContainer({ worksheet, studentId }: WorksheetContainerProps) {
+export default function WorksheetContainer({ worksheet, studentId = '', previewMode = false, onPreviewClose }: WorksheetContainerProps) {
   const router = useRouter();
   const questions = JSON.parse(worksheet.questionsJson) as any[];
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -170,6 +172,19 @@ export default function WorksheetContainer({ worksheet, studentId }: WorksheetCo
     const score = calculateScore();
     setFinalScore(score);
 
+    if (previewMode) {
+      setCompleted(true);
+      if (score >= 80) {
+        confetti({
+          particleCount: 150,
+          spread: 80,
+          origin: { y: 0.6 },
+        });
+      }
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await fetch('/api/student/attempts/submit', {
         method: 'POST',
@@ -259,13 +274,23 @@ export default function WorksheetContainer({ worksheet, studentId }: WorksheetCo
         </div>
 
         <div className="flex gap-4 max-w-sm mx-auto">
-          <button
-            onClick={() => router.push('/student/dashboard')}
-            className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-all cursor-pointer border border-indigo-400/20"
-            style={{ minHeight: '44px' }}
-          >
-            Back to Dashboard
-          </button>
+          {previewMode ? (
+            <button
+              onClick={onPreviewClose}
+              className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-all cursor-pointer border border-indigo-400/20"
+              style={{ minHeight: '44px' }}
+            >
+              Close Test Drive
+            </button>
+          ) : (
+            <button
+              onClick={() => router.push('/student/dashboard')}
+              className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-all cursor-pointer border border-indigo-400/20"
+              style={{ minHeight: '44px' }}
+            >
+              Back to Dashboard
+            </button>
+          )}
         </div>
       </div>
     );

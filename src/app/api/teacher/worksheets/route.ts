@@ -43,7 +43,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized: Teacher or Admin access required' }, { status: 403 });
     }
 
-    const { id, title, categoryId, tier, questions, badgeEmoji } = await request.json();
+    const body = await request.json();
+    const { cloneId, id, title, categoryId, tier, questions, badgeEmoji } = body;
+
+    if (cloneId) {
+      const original = db.prepare('SELECT * FROM worksheets WHERE id = ?').get(cloneId) as any;
+      if (!original) {
+        return NextResponse.json({ error: 'Worksheet to clone not found' }, { status: 404 });
+      }
+      const newId = crypto.randomUUID();
+      const newTitle = `${original.title} (Copy)`;
+      db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json, badge_emoji) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(newId, original.category_id, newTitle, original.tier, original.questions_json, original.badge_emoji || '🥇');
+      return NextResponse.json({ success: true, id: newId });
+    }
 
     if (!title || !categoryId || !tier || !questions || !Array.isArray(questions)) {
       return NextResponse.json({ error: 'Missing or invalid parameters' }, { status: 400 });

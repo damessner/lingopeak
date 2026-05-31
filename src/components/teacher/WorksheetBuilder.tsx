@@ -1,81 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { Question, Category, QuestionType, Worksheet } from '@/lib/worksheet-types';
 import { generateWordSearch, generateCrossword } from '@/lib/gridGenerators';
 
-interface Category {
-  id: string;
-  name: string;
-  unit_title: string;
-  unit_order: number;
-}
-
-interface Question {
-  id: string;
-  type:
-    | 'multiple_choice'
-    | 'fill_in_gap'
-    | 'sentence_unscramble'
-    | 'matching_pairs'
-    | 'drag_and_drop'
-    | 'category_sorting'
-    | 'correct_the_mistake'
-    | 'choice_matrix'
-    | 'crossword'
-    | 'word_search';
-  question: string;
-  
-  // MCQ specific
-  options?: string[];
-  answer?: string;
-  
-  // Fill in Gap / Correct the Mistake specific
-  text?: string;
-  
-  // Unscramble / Word Search specific
-  words?: string[];
-  
-  // Matching Pairs specific
-  pairs?: Record<string, string>;
-  
-  // Drag and Drop specific
-  sentences?: string[];
-  distractors?: string[];
-  distractors_raw?: string; // temporary input string
-  
-  // Category Sorting specific
-  categories?: string[];
-  categories_raw?: string; // temporary input string
-  items?: { text: string; category: string }[];
-  
-  // Correct the Mistake specific
-  mistake?: string;
-  correction?: string;
-  
-  // Choice Matrix specific
-  rows?: string[];
-  rows_raw?: string; // temporary input string
-  columns?: string[];
-  columns_raw?: string; // temporary input string
-  answers?: Record<string, string>;
-  
-  // Crossword specific
-  crossword_items?: { word: string; clue: string }[];
-  grid?: string[][];
-  clues?: any[];
-  
-  // Word Search specific
-  word_search_words?: string; // temporary comma-separated list
-}
-
-interface Worksheet {
-  id?: string;
-  title: string;
-  category_id: string;
-  tier: 'EXPLORER' | 'VOYAGER' | 'CHALLENGER' | 'SUMMIT';
-  questions_json: string;
-  badge_emoji?: string;
-}
+import QuestionCard from './builder/QuestionCard';
+import QuestionTypePicker from './builder/QuestionTypePicker';
+import TemplatePicker from './builder/TemplatePicker';
+import TestDriveModal from './builder/TestDriveModal';
 
 interface WorksheetBuilderProps {
   categories: Category[];
@@ -83,19 +15,6 @@ interface WorksheetBuilderProps {
   onSave: () => void;
   onCancel: () => void;
 }
-
-const QUESTION_TYPES_META = [
-  { id: 'multiple_choice', name: 'Multiple Choice (MCQ)', icon: '🔘', desc: 'Single correct answer from up to 4 choices.' },
-  { id: 'fill_in_gap', name: 'Fill in the Gap', icon: '📝', desc: 'Enter words into brackets [like] this.' },
-  { id: 'drag_and_drop', name: 'Drag & Drop Text', icon: '🖐️', desc: 'Drag answers into bracketed sentence slots.' },
-  { id: 'category_sorting', name: 'Category Sorting', icon: '🗂️', desc: 'Sort items into defined category bins.' },
-  { id: 'correct_the_mistake', name: 'Correct the Mistake', icon: '❌', desc: 'Identify a wrong word and type correction.' },
-  { id: 'choice_matrix', name: 'Choice Matrix Grid', icon: '📊', desc: 'Map row options to correct columns.' },
-  { id: 'sentence_unscramble', name: 'Sentence Unscramble', icon: '🧩', desc: 'Rearrange mixed-up words in order.' },
-  { id: 'matching_pairs', name: 'Matching Pairs', icon: '🔗', desc: 'Link corresponding item pairs together.' },
-  { id: 'crossword', name: 'Crossword Puzzle', icon: '🔠', desc: 'Spelling puzzle generated from clues.' },
-  { id: 'word_search', name: 'Word Search Grid', icon: '🔍', desc: 'Find words hidden in a letter grid.' }
-] as const;
 
 export default function WorksheetBuilder({ categories, worksheet, onSave, onCancel }: WorksheetBuilderProps) {
   const [title, setTitle] = useState(worksheet?.title || '');
@@ -110,11 +29,9 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
       const parsed = JSON.parse(worksheet.questions_json);
       if (!Array.isArray(parsed)) return [];
       
-      // Map initial state helpers
       return parsed.map((q: any) => {
         const mapped = { ...q };
         if (q.type === 'drag_and_drop') {
-          // Identify distractors (words that are not in bracketed sentences)
           const correctWords: string[] = [];
           (q.sentences || []).forEach((s: string) => {
             const matches = s.match(/\[([^\]]+)\]/g) || [];
@@ -130,10 +47,7 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
           mapped.rows_raw = (q.rows || []).join(', ');
           mapped.columns_raw = (q.columns || []).join(', ');
         } else if (q.type === 'crossword') {
-          // Re-assemble crossword_items from grid letters or clues
-          // To make it easy, we store crossword_items as a field if serialized, or rebuild from clues
           mapped.crossword_items = q.crossword_items || (q.clues || []).map((c: any) => {
-            // Find letters in grid to rebuild word
             let word = '';
             for (let i = 0; i < c.length; i++) {
               const r = c.direction === 'across' ? c.row : c.row + i;
@@ -157,13 +71,21 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // UX States
+  // UX Modals & Popovers States
   const [showTypePalette, setShowTypePalette] = useState(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [showTestDrive, setShowTestDrive] = useState(false);
   const [collapsedQuestions, setCollapsedQuestions] = useState<Record<string, boolean>>({});
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
+  // AI Worksheet Generator States
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiCount, setAiCount] = useState(5);
+  const [aiGenerating, setAiGenerating] = useState(false);
+
   // Form helper: add a new question
-  const handleAddQuestion = (type: Question['type']) => {
+  const handleAddQuestion = (type: QuestionType) => {
     const newQuestion: Question = {
       id: `q_${Date.now()}_${questions.length}`,
       type,
@@ -221,6 +143,17 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
     setQuestions(questions.filter((_, idx) => idx !== index));
   };
 
+  const handleDuplicateQuestion = (index: number) => {
+    const original = questions[index];
+    const duplicate: Question = {
+      ...JSON.parse(JSON.stringify(original)),
+      id: `q_dup_${Date.now()}_${index}`
+    };
+    const updated = [...questions];
+    updated.splice(index + 1, 0, duplicate);
+    setQuestions(updated);
+  };
+
   const handleQuestionChange = (index: number, updatedField: Partial<Question>) => {
     const updated = [...questions];
     updated[index] = { ...updated[index], ...updatedField } as Question;
@@ -234,7 +167,6 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
     }));
   };
 
-  // Reordering helpers (arrows fallback)
   const handleMoveQuestion = (index: number, direction: 'up' | 'down') => {
     if (direction === 'up' && index === 0) return;
     if (direction === 'down' && index === questions.length - 1) return;
@@ -245,6 +177,68 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
     updated[index] = updated[targetIdx];
     updated[targetIdx] = temp;
     setQuestions(updated);
+  };
+
+  // AI Worksheet Generator Trigger
+  const handleAIGenerateWorksheet = async () => {
+    if (!aiPrompt.trim()) return;
+    setAiGenerating(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/teacher/worksheets/ai-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'generate_worksheet',
+          prompt: aiPrompt.trim(),
+          tier,
+          count: aiCount
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.questions && Array.isArray(data.questions)) {
+          // Pre-process crossword and word searches generated by AI to construct grids
+          const processed = data.questions.map((q: any) => {
+            const mapped = { ...q };
+            if (q.type === 'crossword' && q.crossword_items) {
+              try {
+                const layout = generateCrossword(q.crossword_items);
+                mapped.grid = layout.grid;
+                mapped.clues = layout.clues;
+              } catch (err) {}
+            } else if (q.type === 'word_search' && q.words) {
+              try {
+                const layout = generateWordSearch(q.words);
+                mapped.grid = layout.grid;
+                mapped.words = layout.words;
+                mapped.word_search_words = q.words.join(', ');
+              } catch (err) {}
+            } else if (q.type === 'drag_and_drop') {
+              mapped.distractors_raw = (q.distractors || []).join(', ');
+            } else if (q.type === 'category_sorting') {
+              mapped.categories_raw = (q.categories || []).join(', ');
+            } else if (q.type === 'choice_matrix') {
+              mapped.rows_raw = (q.rows || []).join(', ');
+              mapped.columns_raw = (q.columns || []).join(', ');
+            }
+            return mapped;
+          });
+
+          setQuestions(processed);
+          setAiPanelOpen(false);
+          setAiPrompt('');
+        }
+      } else {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to generate questions.');
+      }
+    } catch (err: any) {
+      setError(err.message || 'AI Generation failed. Please try again.');
+    } finally {
+      setAiGenerating(false);
+    }
   };
 
   // Keyboard Shortcuts Hook
@@ -267,223 +261,6 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
-
-  // MC Choices
-  const handleMCOptionChange = (qIdx: number, optIdx: number, val: string) => {
-    const updated = [...questions];
-    const question = updated[qIdx];
-    if (question.options) {
-      const options = [...question.options];
-      options[optIdx] = val;
-      updated[qIdx] = { ...question, options };
-      setQuestions(updated);
-    }
-  };
-
-  // Matching Pairs
-  const handlePairChange = (qIdx: number, oldKey: string, newKey: string, val: string) => {
-    const updated = [...questions];
-    const question = updated[qIdx];
-    if (question.pairs) {
-      const pairs = { ...question.pairs };
-      if (oldKey !== newKey) delete pairs[oldKey];
-      pairs[newKey] = val;
-      updated[qIdx] = { ...question, pairs };
-      setQuestions(updated);
-    }
-  };
-
-  const handleAddPair = (qIdx: number) => {
-    const updated = [...questions];
-    const question = updated[qIdx];
-    if (question.pairs) {
-      const pairs = { ...question.pairs, '': '' };
-      updated[qIdx] = { ...question, pairs };
-      setQuestions(updated);
-    }
-  };
-
-  const handleRemovePair = (qIdx: number, key: string) => {
-    const updated = [...questions];
-    const question = updated[qIdx];
-    if (question.pairs) {
-      const pairs = { ...question.pairs };
-      delete pairs[key];
-      updated[qIdx] = { ...question, pairs };
-      setQuestions(updated);
-    }
-  };
-
-  // Sentence Unscramble raw synchronization
-  const [unscrambleRawInputs, setUnscrambleRawInputs] = useState<Record<number, string>>(() => {
-    const initialRaw: Record<number, string> = {};
-    getInitialQuestions().forEach((q, idx) => {
-      if (q.type === 'sentence_unscramble' && q.words) {
-        initialRaw[idx] = q.words.join(' ');
-      }
-    });
-    return initialRaw;
-  });
-
-  const handleUnscrambleRawChange = (qIdx: number, text: string) => {
-    setUnscrambleRawInputs({ ...unscrambleRawInputs, [qIdx]: text });
-    const words = text.trim().split(/\s+/).filter(Boolean);
-    handleQuestionChange(qIdx, { words });
-  };
-
-  // NEW EDITORS LOGIC
-
-  // Drag and Drop Sentences
-  const handleAddSentence = (qIdx: number) => {
-    const updated = [...questions];
-    const q = updated[qIdx];
-    q.sentences = [...(q.sentences || []), ''];
-    setQuestions(updated);
-  };
-
-  const handleRemoveSentence = (qIdx: number, sIdx: number) => {
-    const updated = [...questions];
-    const q = updated[qIdx];
-    if (q.sentences) {
-      q.sentences = q.sentences.filter((_, i) => i !== sIdx);
-      setQuestions(updated);
-    }
-  };
-
-  const handleSentenceChange = (qIdx: number, sIdx: number, val: string) => {
-    const updated = [...questions];
-    const q = updated[qIdx];
-    if (q.sentences) {
-      q.sentences[sIdx] = val;
-      setQuestions(updated);
-    }
-  };
-
-  const handleDistractorsChange = (qIdx: number, val: string) => {
-    const updated = [...questions];
-    const q = updated[qIdx];
-    q.distractors_raw = val;
-    q.distractors = val.split(',').map(s => s.trim()).filter(Boolean);
-    setQuestions(updated);
-  };
-
-  // Category Sorting Items
-  const handleAddSortingItem = (qIdx: number) => {
-    const updated = [...questions];
-    const q = updated[qIdx];
-    q.items = [...(q.items || []), { text: '', category: '' }];
-    setQuestions(updated);
-  };
-
-  const handleRemoveSortingItem = (qIdx: number, iIdx: number) => {
-    const updated = [...questions];
-    const q = updated[qIdx];
-    if (q.items) {
-      q.items = q.items.filter((_, i) => i !== iIdx);
-      setQuestions(updated);
-    }
-  };
-
-  const handleSortingItemChange = (qIdx: number, iIdx: number, field: 'text' | 'category', val: string) => {
-    const updated = [...questions];
-    const q = updated[qIdx];
-    if (q.items) {
-      q.items[iIdx] = { ...q.items[iIdx], [field]: val };
-      setQuestions(updated);
-    }
-  };
-
-  const handleCategoriesRawChange = (qIdx: number, val: string) => {
-    const updated = [...questions];
-    const q = updated[qIdx];
-    q.categories_raw = val;
-    q.categories = val.split(',').map(s => s.trim()).filter(Boolean);
-    setQuestions(updated);
-  };
-
-  // Choice Matrix
-  const handleMatrixRawChange = (qIdx: number, field: 'rows_raw' | 'columns_raw', val: string) => {
-    const updated = [...questions];
-    const q = updated[qIdx];
-    q[field] = val;
-    const arrayField = field === 'rows_raw' ? 'rows' : 'columns';
-    q[arrayField] = val.split(',').map(s => s.trim()).filter(Boolean);
-    setQuestions(updated);
-  };
-
-  const handleMatrixAnswerSelect = (qIdx: number, row: string, col: string) => {
-    const updated = [...questions];
-    const q = updated[qIdx];
-    q.answers = { ...(q.answers || {}), [row]: col };
-    setQuestions(updated);
-  };
-
-  // Crossword Items
-  const handleAddCrosswordItem = (qIdx: number) => {
-    const updated = [...questions];
-    const q = updated[qIdx];
-    q.crossword_items = [...(q.crossword_items || []), { word: '', clue: '' }];
-    setQuestions(updated);
-  };
-
-  const handleRemoveCrosswordItem = (qIdx: number, iIdx: number) => {
-    const updated = [...questions];
-    const q = updated[qIdx];
-    if (q.crossword_items) {
-      q.crossword_items = q.crossword_items.filter((_, i) => i !== iIdx);
-      setQuestions(updated);
-    }
-  };
-
-  const handleCrosswordItemChange = (qIdx: number, iIdx: number, field: 'word' | 'clue', val: string) => {
-    const updated = [...questions];
-    const q = updated[qIdx];
-    if (q.crossword_items) {
-      q.crossword_items[iIdx] = { ...q.crossword_items[iIdx], [field]: val };
-      setQuestions(updated);
-    }
-  };
-
-  const handleGenerateCrosswordLayout = (qIdx: number) => {
-    const updated = [...questions];
-    const q = updated[qIdx];
-    if (!q.crossword_items || q.crossword_items.length === 0) return;
-
-    try {
-      const { grid, clues } = generateCrossword(q.crossword_items);
-      q.grid = grid;
-      q.clues = clues;
-      setQuestions(updated);
-    } catch (e) {
-      console.error(e);
-      alert('Failed to generate crossword grid. Try different words.');
-    }
-  };
-
-  // Word Search
-  const handleWordSearchWordsChange = (qIdx: number, val: string) => {
-    const updated = [...questions];
-    const q = updated[qIdx];
-    q.word_search_words = val;
-    q.words = val.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
-    setQuestions(updated);
-  };
-
-  const handleGenerateWordSearchLayout = (qIdx: number) => {
-    const updated = [...questions];
-    const q = updated[qIdx];
-    if (!q.words || q.words.length === 0) return;
-
-    try {
-      const { grid, words } = generateWordSearch(q.words);
-      q.grid = grid;
-      q.words = words; // Filter down to placed words
-      setQuestions(updated);
-    } catch (e) {
-      console.error(e);
-      alert('Failed to generate word search grid.');
-    }
-  };
 
   // Submit to API
   const handleSaveSubmit = async (e: React.FormEvent) => {
@@ -642,12 +419,23 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
             {worksheet?.id ? 'Worksheet Editor' : 'Worksheet Creator'}
           </h2>
         </div>
-        <button
-          onClick={onCancel}
-          className="text-xs font-bold text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
-        >
-          Cancel
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setShowTemplatePicker(true)}
+            className="text-xs bg-slate-900 hover:bg-slate-850 text-indigo-400 hover:text-indigo-300 font-bold border border-slate-800 px-4 py-2 rounded-xl cursor-pointer transition-colors"
+          >
+            📋 Use Template
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowTestDrive(true)}
+            disabled={questions.length === 0}
+            className="text-xs bg-emerald-600/10 hover:bg-emerald-600/25 disabled:bg-slate-900 text-emerald-400 disabled:text-slate-650 font-bold border border-emerald-500/20 px-4 py-2 rounded-xl cursor-pointer disabled:cursor-not-allowed transition-colors"
+          >
+            🎮 Test Drive
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -656,6 +444,58 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
           <span>{error}</span>
         </div>
       )}
+
+      {/* AI generator copilot toggle */}
+      <div className="border border-indigo-500/20 rounded-2xl bg-indigo-950/10 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setAiPanelOpen(!aiPanelOpen)}
+          className="w-full flex items-center justify-between p-4 text-left font-bold text-xs text-indigo-300 hover:text-white cursor-pointer select-none"
+        >
+          <span className="flex items-center gap-2">🤖 AI Co-Pilot Worksheet Generator</span>
+          <span>{aiPanelOpen ? '▲ Hide' : '▼ Expand'}</span>
+        </button>
+
+        {aiPanelOpen && (
+          <div className="p-4 border-t border-indigo-500/10 space-y-4 bg-indigo-950/20 animate-scaleUp">
+            <div className="space-y-1">
+              <label className="block text-[9px] font-black text-indigo-400 uppercase tracking-widest">Generate Worksheet by Prompt</label>
+              <textarea
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                placeholder="e.g. Present perfect vs past simple, including matching verbs and gap filling exercises about travel experiences"
+                rows={2}
+                className="w-full bg-slate-950 border border-indigo-500/10 rounded-xl p-3 text-xs text-slate-300 font-bold outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div className="flex justify-between items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Number of Questions:</span>
+                <select
+                  value={aiCount}
+                  onChange={(e) => setAiCount(Number(e.target.value))}
+                  className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-300 font-bold cursor-pointer"
+                >
+                  <option value={3}>3 Questions</option>
+                  <option value={5}>5 Questions</option>
+                  <option value={7}>7 Questions</option>
+                  <option value={10}>10 Questions</option>
+                </select>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAIGenerateWorksheet}
+                disabled={aiGenerating || !aiPrompt.trim()}
+                className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 text-white disabled:text-slate-650 border border-indigo-500/20 text-xs font-bold py-2 px-5 rounded-xl cursor-pointer disabled:cursor-not-allowed transition-all"
+              >
+                {aiGenerating ? '🤖 Generating questions...' : '⚡ Generate Worksheet'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Editor Form */}
       <form onSubmit={handleSaveSubmit} className="space-y-6">
@@ -745,27 +585,11 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
                 <span className="text-[10px] opacity-75">{showTypePalette ? '▲' : '▼'}</span>
               </button>
               
-              {showTypePalette && (
-                <div className="absolute right-0 top-full mt-2 w-80 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-3 grid grid-cols-1 gap-2 z-50 max-h-[400px] overflow-y-auto">
-                  {QUESTION_TYPES_META.map(meta => (
-                    <button
-                      key={meta.id}
-                      type="button"
-                      onClick={() => {
-                        handleAddQuestion(meta.id);
-                        setShowTypePalette(false);
-                      }}
-                      className="flex gap-3 text-left p-2 hover:bg-slate-950 border border-transparent hover:border-slate-800 rounded-xl transition-all cursor-pointer"
-                    >
-                      <span className="text-2xl p-1.5 bg-slate-950/60 rounded-lg select-none">{meta.icon}</span>
-                      <div>
-                        <div className="text-xs font-bold text-white uppercase tracking-tight">{meta.name}</div>
-                        <div className="text-[10px] text-slate-400 mt-0.5 leading-normal">{meta.desc}</div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+              <QuestionTypePicker
+                isOpen={showTypePalette}
+                onClose={() => setShowTypePalette(false)}
+                onSelect={handleAddQuestion}
+              />
             </div>
           </div>
 
@@ -780,9 +604,18 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
                 const isCollapsed = !!collapsedQuestions[q.id];
                 
                 return (
-                  <div
+                  <QuestionCard
                     key={q.id}
-                    draggable={true}
+                    question={q}
+                    index={idx}
+                    totalQuestions={questions.length}
+                    isCollapsed={isCollapsed}
+                    onToggleCollapse={() => toggleCollapse(q.id)}
+                    onMoveUp={() => handleMoveQuestion(idx, 'up')}
+                    onMoveDown={() => handleMoveQuestion(idx, 'down')}
+                    onRemove={() => handleRemoveQuestion(idx)}
+                    onDuplicate={() => handleDuplicateQuestion(idx)}
+                    onChange={(fields) => handleQuestionChange(idx, fields)}
                     onDragStart={(e) => {
                       setDraggedIndex(idx);
                       e.dataTransfer.effectAllowed = 'move';
@@ -800,543 +633,8 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
                       setDraggedIndex(null);
                     }}
                     onDragEnd={() => setDraggedIndex(null)}
-                    className={`bg-slate-950/40 border border-slate-850 p-5 rounded-2xl space-y-4 relative transition-all ${
-                      draggedIndex === idx ? 'opacity-40 border-dashed border-indigo-500' : ''
-                    }`}
-                  >
-                    
-                    {/* Header: Click to collapse / expand, reorder, delete */}
-                    <div className="flex justify-between items-center border-b border-slate-900 pb-2">
-                      <div
-                        onClick={() => toggleCollapse(q.id)}
-                        className="flex items-center gap-2 cursor-pointer select-none flex-grow"
-                      >
-                        <span className="cursor-grab text-slate-600 hover:text-slate-400 px-1 text-base select-none">☰</span>
-                        <span className="w-5 h-5 rounded-full bg-slate-800 flex items-center justify-center text-[10px] font-black text-slate-300">
-                          {idx + 1}
-                        </span>
-                        <span className="text-[10px] bg-slate-800 text-slate-400 font-bold px-2 py-0.5 rounded uppercase tracking-wider">
-                          {q.type.replace(/_/g, ' ')}
-                        </span>
-                        {isCollapsed && q.question && (
-                          <span className="text-xs text-slate-500 truncate font-semibold max-w-sm ml-2">
-                            - {q.question}
-                          </span>
-                        )}
-                        <span className="text-[10px] text-indigo-400 font-bold ml-2">
-                          {isCollapsed ? '[Expand]' : '[Collapse]'}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleMoveQuestion(idx, 'up')}
-                          disabled={idx === 0}
-                          className="text-[10px] font-bold px-2 py-1 bg-slate-900 border border-slate-800 text-slate-400 disabled:opacity-30 rounded hover:text-indigo-400 cursor-pointer"
-                        >
-                          ▲
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleMoveQuestion(idx, 'down')}
-                          disabled={idx === questions.length - 1}
-                          className="text-[10px] font-bold px-2 py-1 bg-slate-900 border border-slate-800 text-slate-400 disabled:opacity-30 rounded hover:text-indigo-400 cursor-pointer"
-                        >
-                          ▼
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveQuestion(idx)}
-                          className="text-[10px] font-bold px-2.5 py-1 bg-red-950/20 border border-red-500/20 text-red-400 hover:bg-red-500 hover:text-white rounded cursor-pointer transition-all ml-4"
-                        >
-                          Delete ✕
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Question Content (hidden when collapsed) */}
-                    {!isCollapsed && (
-                      <div className="space-y-4 animate-scaleUp">
-                        {/* Shared prompt/instructions field */}
-                        <div className="space-y-1">
-                          <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Question prompt / Instruction text</label>
-                          <input
-                            type="text"
-                            value={q.question}
-                            onChange={(e) => handleQuestionChange(idx, { question: e.target.value })}
-                            placeholder="e.g. Choose the correct past tense form"
-                            className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3.5 py-2 text-xs text-slate-300 font-bold outline-none focus:border-indigo-500 transition-colors"
-                            required
-                          />
-                        </div>
-
-                        {/* MCQ Specific Fields */}
-                        {q.type === 'multiple_choice' && q.options && (
-                          <div className="space-y-3 pt-2">
-                            <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Choices & Correct Answer</label>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {q.options.map((opt, optIdx) => (
-                                <div key={optIdx} className="flex items-center gap-3 bg-slate-950/60 p-2.5 rounded-xl border border-slate-900">
-                                  <input
-                                    type="radio"
-                                    name={`answer_${q.id}`}
-                                    checked={q.answer === opt && opt !== ''}
-                                    onChange={() => handleQuestionChange(idx, { answer: opt })}
-                                    disabled={opt === ''}
-                                    className="w-4 h-4 text-indigo-600 border-slate-800 bg-slate-950 focus:ring-indigo-500 cursor-pointer"
-                                  />
-                                  <input
-                                    type="text"
-                                    value={opt}
-                                    onChange={(e) => handleMCOptionChange(idx, optIdx, e.target.value)}
-                                    placeholder={`Choice ${optIdx + 1}`}
-                                    className="flex-grow bg-slate-950 border border-slate-900 rounded-lg px-3 py-1.5 text-xs text-slate-300 font-bold outline-none"
-                                  />
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Fill in Gap Specific Fields */}
-                        {q.type === 'fill_in_gap' && (
-                          <div className="space-y-2 pt-2">
-                            <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Gap Text Block</label>
-                            <textarea
-                              value={q.text || ''}
-                              onChange={(e) => handleQuestionChange(idx, { text: e.target.value })}
-                              placeholder="Write the sentence. e.g. She [drives] (drive) to work."
-                              rows={3}
-                              className="w-full bg-slate-950 border border-slate-900 rounded-xl p-3 text-xs text-slate-300 font-bold outline-none focus:border-indigo-500"
-                            />
-                            <p className="text-[9px] text-slate-500 leading-relaxed">
-                              Wrap correct answers in square brackets `[drives]`. Optional: provide hints in parentheses `(drive)`.
-                            </p>
-                          </div>
-                        )}
-
-                        {/* Sentence Unscramble Specific Fields */}
-                        {q.type === 'sentence_unscramble' && (
-                          <div className="space-y-2 pt-2">
-                            <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Unscramble Correct Sentence</label>
-                            <input
-                              type="text"
-                              value={unscrambleRawInputs[idx] || (q.words ? q.words.join(' ') : '')}
-                              onChange={(e) => handleUnscrambleRawChange(idx, e.target.value)}
-                              placeholder="e.g. Liam found an old map in the attic"
-                              className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3.5 py-2 text-xs text-slate-300 font-bold outline-none focus:border-indigo-500"
-                            />
-                          </div>
-                        )}
-
-                        {/* Matching Pairs Specific Fields */}
-                        {q.type === 'matching_pairs' && q.pairs && (
-                          <div className="space-y-3 pt-2">
-                            <div className="flex justify-between items-center">
-                              <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Matching Items Pairs</label>
-                              <button
-                                type="button"
-                                onClick={() => handleAddPair(idx)}
-                                className="text-[9px] font-bold bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 py-1 px-2.5 rounded border border-indigo-500/10 cursor-pointer"
-                              >
-                                + Add Pair
-                              </button>
-                            </div>
-                            <div className="space-y-2 max-h-56 overflow-y-auto">
-                              {Object.entries(q.pairs).map(([key, val], pairIdx) => (
-                                <div key={pairIdx} className="flex gap-2 items-center">
-                                  <input
-                                    type="text"
-                                    value={key}
-                                    onChange={(e) => handlePairChange(idx, key, e.target.value, val)}
-                                    placeholder="Word A (e.g. hot)"
-                                    className="flex-1 bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-bold outline-none"
-                                  />
-                                  <span className="text-slate-600">↔</span>
-                                  <input
-                                    type="text"
-                                    value={val}
-                                    onChange={(e) => handlePairChange(idx, key, key, e.target.value)}
-                                    placeholder="Word B (e.g. cold)"
-                                    className="flex-1 bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-bold outline-none"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemovePair(idx, key)}
-                                    className="text-[10px] text-red-400 hover:text-red-300 font-bold px-2 py-1 border border-transparent cursor-pointer"
-                                  >
-                                    ✕
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Drag and Drop Specific Fields */}
-                        {q.type === 'drag_and_drop' && q.sentences && (
-                          <div className="space-y-3 pt-2">
-                            <div className="flex justify-between items-center">
-                              <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Bracketed Sentences</label>
-                              <button
-                                type="button"
-                                onClick={() => handleAddSentence(idx)}
-                                className="text-[9px] font-bold bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 py-1 px-2.5 rounded border border-indigo-500/10 cursor-pointer"
-                              >
-                                + Add Sentence
-                              </button>
-                            </div>
-                            <div className="space-y-2">
-                              {q.sentences.map((sentence, sIdx) => (
-                                <div key={sIdx} className="flex gap-2 items-center">
-                                  <span className="text-slate-500 font-bold text-xs">{sIdx + 1}.</span>
-                                  <input
-                                    type="text"
-                                    value={sentence}
-                                    onChange={(e) => handleSentenceChange(idx, sIdx, e.target.value)}
-                                    placeholder="e.g. Grass is [green] in summer."
-                                    className="flex-grow bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-bold outline-none"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveSentence(idx, sIdx)}
-                                    className="text-[10px] text-red-400 hover:text-red-300 font-bold px-2 py-1 border border-transparent cursor-pointer"
-                                  >
-                                    ✕
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                            <div className="space-y-1">
-                              <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Extra Distractor Words (comma separated)</label>
-                              <input
-                                type="text"
-                                value={q.distractors_raw || ''}
-                                onChange={(e) => handleDistractorsChange(idx, e.target.value)}
-                                placeholder="e.g. yellow, black, brown"
-                                className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-bold outline-none"
-                              />
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Category Sorting Specific Fields */}
-                        {q.type === 'category_sorting' && q.categories && (
-                          <div className="space-y-3 pt-2">
-                            <div className="space-y-1">
-                              <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Sorting Categories (comma separated)</label>
-                              <input
-                                type="text"
-                                value={q.categories_raw || ''}
-                                onChange={(e) => handleCategoriesRawChange(idx, e.target.value)}
-                                placeholder="e.g. Nouns, Verbs, Adjectives"
-                                className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-bold outline-none"
-                              />
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Sorting Items</label>
-                              <button
-                                type="button"
-                                onClick={() => handleAddSortingItem(idx)}
-                                className="text-[9px] font-bold bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 py-1 px-2.5 rounded border border-indigo-500/10 cursor-pointer"
-                              >
-                                + Add Item
-                              </button>
-                            </div>
-                            <div className="space-y-2">
-                              {(q.items || []).map((item, iIdx) => (
-                                <div key={iIdx} className="flex gap-2 items-center">
-                                  <input
-                                    type="text"
-                                    value={item.text}
-                                    onChange={(e) => handleSortingItemChange(idx, iIdx, 'text', e.target.value)}
-                                    placeholder="Item (e.g. apple)"
-                                    className="flex-1 bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-bold outline-none"
-                                  />
-                                  <span className="text-slate-600">→</span>
-                                  <select
-                                    value={item.category}
-                                    onChange={(e) => handleSortingItemChange(idx, iIdx, 'category', e.target.value)}
-                                    className="flex-1 bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-bold outline-none cursor-pointer"
-                                  >
-                                    <option value="">Select Bin</option>
-                                    {q.categories?.map(c => (
-                                      <option key={c} value={c}>{c}</option>
-                                    ))}
-                                  </select>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveSortingItem(idx, iIdx)}
-                                    className="text-[10px] text-red-400 hover:text-red-300 font-bold px-2 py-1 border border-transparent cursor-pointer"
-                                  >
-                                    ✕
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Correct the Mistake Specific Fields */}
-                        {q.type === 'correct_the_mistake' && (
-                          <div className="space-y-3 pt-2">
-                            <div className="space-y-1">
-                              <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Mistake Sentence</label>
-                              <input
-                                type="text"
-                                value={q.text || ''}
-                                onChange={(e) => handleQuestionChange(idx, { text: e.target.value })}
-                                placeholder="e.g. There is five books on the table."
-                                className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3.5 py-2 text-xs text-slate-300 font-bold outline-none"
-                              />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-1">
-                                <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Wrong Word (Mistake)</label>
-                                <input
-                                  type="text"
-                                  value={q.mistake || ''}
-                                  onChange={(e) => handleQuestionChange(idx, { mistake: e.target.value })}
-                                  placeholder="e.g. is"
-                                  className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-bold outline-none"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Correction Word</label>
-                                <input
-                                  type="text"
-                                  value={q.correction || ''}
-                                  onChange={(e) => handleQuestionChange(idx, { correction: e.target.value })}
-                                  placeholder="e.g. are"
-                                  className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-bold outline-none"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Choice Matrix Specific Fields */}
-                        {q.type === 'choice_matrix' && q.rows && q.columns && (
-                          <div className="space-y-3 pt-2">
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-1">
-                                <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Rows (comma separated)</label>
-                                <input
-                                  type="text"
-                                  value={q.rows_raw || ''}
-                                  onChange={(e) => handleMatrixRawChange(idx, 'rows_raw', e.target.value)}
-                                  placeholder="e.g. believe, run, know"
-                                  className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-bold outline-none"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Columns (comma separated)</label>
-                                <input
-                                  type="text"
-                                  value={q.columns_raw || ''}
-                                  onChange={(e) => handleMatrixRawChange(idx, 'columns_raw', e.target.value)}
-                                  placeholder="e.g. Stative Verb, Dynamic Verb"
-                                  className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-bold outline-none"
-                                />
-                              </div>
-                            </div>
-
-                            {q.rows && q.columns && q.rows.length > 0 && q.columns.length > 0 && (
-                              <div className="space-y-2">
-                                <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Correct Answer Mapping Matrix</label>
-                                <div className="border border-slate-900 rounded-xl overflow-hidden bg-slate-950/20 text-xs">
-                                  <table className="w-full text-left">
-                                    <thead>
-                                      <tr className="bg-slate-950/60 border-b border-slate-900">
-                                        <th className="p-3 font-bold text-slate-400">Statement</th>
-                                        {q.columns?.map(col => (
-                                          <th key={col} className="p-3 font-bold text-slate-400 text-center">{col}</th>
-                                        ))}
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-900/60">
-                                      {q.rows?.map(row => (
-                                        <tr key={row}>
-                                          <td className="p-3 font-bold text-white">{row}</td>
-                                          {q.columns?.map(col => {
-                                            const isSelected = q.answers?.[row] === col;
-                                            return (
-                                              <td key={col} className="p-2 text-center">
-                                                <input
-                                                  type="radio"
-                                                  name={`matrix_${q.id}_${row}`}
-                                                  checked={isSelected}
-                                                  onChange={() => handleMatrixAnswerSelect(idx, row, col)}
-                                                  className="w-4 h-4 text-indigo-650 border-slate-800 bg-slate-950 focus:ring-indigo-500 cursor-pointer"
-                                                />
-                                              </td>
-                                            );
-                                          })}
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Crossword Specific Fields */}
-                        {q.type === 'crossword' && q.crossword_items && (
-                          <div className="space-y-4 pt-2">
-                            <div className="flex justify-between items-center">
-                              <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Crossword Word & Clue List</label>
-                              <button
-                                type="button"
-                                onClick={() => handleAddCrosswordItem(idx)}
-                                className="text-[9px] font-bold bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 py-1 px-2.5 rounded border border-indigo-500/10 cursor-pointer"
-                              >
-                                + Add Clue
-                              </button>
-                            </div>
-                            <div className="space-y-2">
-                              {q.crossword_items.map((item, iIdx) => (
-                                <div key={iIdx} className="flex gap-2 items-center animate-scaleUp">
-                                  <input
-                                    type="text"
-                                    value={item.word}
-                                    onChange={(e) => handleCrosswordItemChange(idx, iIdx, 'word', e.target.value)}
-                                    placeholder="Word (e.g. NOUN)"
-                                    className="flex-1 bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-bold uppercase outline-none"
-                                  />
-                                  <input
-                                    type="text"
-                                    value={item.clue}
-                                    onChange={(e) => handleCrosswordItemChange(idx, iIdx, 'clue', e.target.value)}
-                                    placeholder="Clue (e.g. A naming word)"
-                                    className="flex-[2] bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-bold outline-none"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveCrosswordItem(idx, iIdx)}
-                                    className="text-[10px] text-red-400 hover:text-red-300 font-bold px-2 py-1 border border-transparent cursor-pointer"
-                                  >
-                                    ✕
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                            <div className="flex items-center gap-4">
-                              <button
-                                type="button"
-                                onClick={() => handleGenerateCrosswordLayout(idx)}
-                                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] py-2 px-4 rounded-xl border border-indigo-400/20 cursor-pointer transition-all uppercase"
-                              >
-                                ⚡ Auto-Generate Crossword Grid
-                              </button>
-                              
-                              {q.grid && q.grid.length > 0 && (
-                                <span className="text-[10px] text-emerald-400 font-black">
-                                  ✓ Grid Generated ({q.grid[0].length}x{q.grid.length}, {q.clues?.length} Clues)
-                                </span>
-                              )}
-                            </div>
-
-                            {/* ASCII layout preview */}
-                            {q.grid && q.grid.length > 0 && (
-                              <div className="space-y-1.5 pt-1">
-                                <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Layout Preview</label>
-                                <div className="bg-slate-950 p-4 border border-slate-900 rounded-xl inline-block max-w-full overflow-x-auto">
-                                  <div
-                                    className="grid gap-1"
-                                    style={{
-                                      gridTemplateRows: `repeat(${q.grid.length}, minmax(0, 1fr))`,
-                                      gridTemplateColumns: `repeat(${q.grid[0].length}, minmax(0, 1fr))`,
-                                    }}
-                                  >
-                                    {q.grid.map((row, rIdx) =>
-                                      row.map((cell, cIdx) => (
-                                        <div
-                                          key={`${rIdx}_${cIdx}`}
-                                          className={`w-6 h-6 flex items-center justify-center text-[10px] font-bold rounded ${
-                                            cell === '.'
-                                              ? 'bg-slate-900 text-slate-800'
-                                              : 'bg-indigo-600/20 border border-indigo-500/20 text-indigo-300'
-                                          }`}
-                                          style={{ minWidth: '24px', minHeight: '24px' }}
-                                        >
-                                          {cell === '.' ? '' : cell}
-                                        </div>
-                                      ))
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Word Search Specific Fields */}
-                        {q.type === 'word_search' && (
-                          <div className="space-y-4 pt-2">
-                            <div className="space-y-1">
-                              <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Hidden Words (comma separated)</label>
-                              <input
-                                type="text"
-                                value={q.word_search_words || ''}
-                                onChange={(e) => handleWordSearchWordsChange(idx, e.target.value)}
-                                placeholder="e.g. APPLE, ORANGE, BANANA"
-                                className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3.5 py-2 text-xs text-slate-300 font-bold uppercase outline-none"
-                              />
-                            </div>
-                            
-                            <div className="flex items-center gap-4">
-                              <button
-                                type="button"
-                                onClick={() => handleGenerateWordSearchLayout(idx)}
-                                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] py-2 px-4 rounded-xl border border-indigo-400/20 cursor-pointer transition-all uppercase"
-                              >
-                                ⚡ Auto-Generate Word Search Grid
-                              </button>
-                              
-                              {q.grid && q.grid.length > 0 && (
-                                <span className="text-[10px] text-emerald-400 font-black">
-                                  ✓ Grid Generated ({q.grid[0].length}x{q.grid.length})
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Grid layout preview */}
-                            {q.grid && q.grid.length > 0 && (
-                              <div className="space-y-1.5 pt-1">
-                                <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Grid Preview</label>
-                                <div className="bg-slate-950 p-4 border border-slate-900 rounded-xl inline-block max-w-full overflow-x-auto">
-                                  <div
-                                    className="grid gap-1"
-                                    style={{
-                                      gridTemplateRows: `repeat(${q.grid.length}, minmax(0, 1fr))`,
-                                      gridTemplateColumns: `repeat(${q.grid[0].length}, minmax(0, 1fr))`,
-                                    }}
-                                  >
-                                    {q.grid.map((row, rIdx) =>
-                                      row.map((cell, cIdx) => (
-                                        <div
-                                          key={`${rIdx}_${cIdx}`}
-                                          className="w-6 h-6 flex items-center justify-center text-[10px] font-bold rounded bg-slate-900/60 border border-slate-800 text-slate-300"
-                                          style={{ minWidth: '24px', minHeight: '24px' }}
-                                        >
-                                          {cell}
-                                        </div>
-                                      ))
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                      </div>
-                    )}
-
-                  </div>
+                    isDragged={draggedIndex === idx}
+                  />
                 );
               })}
             </div>
@@ -1344,11 +642,11 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
         </div>
 
         {/* Footer save/cancel row */}
-        <div className="flex justify-end gap-3 pt-6 border-t border-slate-800/80">
+        <div className="flex justify-end gap-3 pt-6 border-t border-slate-800/80 font-bold">
           <button
             type="button"
             onClick={onCancel}
-            className="bg-slate-900 hover:bg-slate-850 text-slate-400 hover:text-slate-300 font-bold border border-slate-800 text-xs py-2.5 px-6 rounded-xl cursor-pointer transition-all"
+            className="bg-slate-900 hover:bg-slate-850 text-slate-400 hover:text-slate-300 border border-slate-800 text-xs py-2.5 px-6 rounded-xl cursor-pointer transition-all"
             style={{ minHeight: '40px' }}
           >
             Cancel
@@ -1357,7 +655,7 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
             id="worksheet-save-btn"
             type="submit"
             disabled={saving}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2.5 px-6 rounded-xl border border-indigo-400/20 cursor-pointer transition-all disabled:opacity-50"
+            className="bg-indigo-650 hover:bg-indigo-600 text-white font-bold text-xs py-2.5 px-6 rounded-xl border border-indigo-500/20 cursor-pointer transition-all disabled:opacity-50"
             style={{ minHeight: '40px' }}
           >
             {saving ? 'Saving...' : 'Save & Publish Worksheet'}
@@ -1365,6 +663,25 @@ export default function WorksheetBuilder({ categories, worksheet, onSave, onCanc
         </div>
 
       </form>
+
+      {/* Modals */}
+      <TemplatePicker
+        isOpen={showTemplatePicker}
+        onClose={() => setShowTemplatePicker(false)}
+        onSelect={(newQuestions, badge) => {
+          setQuestions([...questions, ...newQuestions]);
+          setBadgeEmoji(badge);
+        }}
+      />
+
+      <TestDriveModal
+        isOpen={showTestDrive}
+        onClose={() => setShowTestDrive(false)}
+        title={title}
+        tier={tier}
+        questions={questions}
+      />
+
     </div>
   );
 }

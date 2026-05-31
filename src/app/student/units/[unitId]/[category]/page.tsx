@@ -188,7 +188,7 @@ export default async function UnitCategoryPage({ params }: CategoryPageProps) {
             {/* Direct creation button for teachers */}
             {(session.role === 'TEACHER' || session.role === 'ADMIN') && (
               <Link
-                href={`/teacher/dashboard?tab=worksheets&action=new&categoryId=${categoryRecord.id}`}
+                href={`/teacher/worksheets/builder?categoryId=${categoryRecord.id}`}
                 className="mt-2 text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold px-3 py-2 rounded-xl border border-indigo-400/20 transition-all flex items-center gap-1 shadow-md uppercase tracking-wider"
               >
                 ➕ Create Worksheet
