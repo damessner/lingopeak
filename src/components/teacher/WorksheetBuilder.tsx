@@ -13,6 +13,7 @@ import { validateQuestion } from './builder/WorksheetValidation';
 import AICoPilotPanel from './builder/AICoPilotPanel';
 import BadgeEmojiPicker from './builder/BadgeEmojiPicker';
 import ErrorBoundary from './builder/ErrorBoundary';
+import TTSProgressBarPlayer from '@/components/worksheets/TTSProgressBarPlayer';
 
 interface WorksheetBuilderProps {
   categories: Category[];
@@ -61,6 +62,116 @@ export default function WorksheetBuilder({
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingAudio, setUploadingAudio] = useState(false);
+  const [activeAudioTab, setActiveAudioTab] = useState<'upload' | 'tts'>(
+    audioUrl?.startsWith('tts://') ? 'tts' : 'upload'
+  );
+  const [ttsText, setTtsText] = useState(audioUrl?.startsWith('tts://') ? audioUrl.replace('tts://', '') : '');
+  const [ytLinkInput, setYtLinkInput] = useState('');
+
+  // Sync state with draft recovery / database loads
+  useEffect(() => {
+    if (audioUrl?.startsWith('tts://')) {
+      setTtsText(audioUrl.replace('tts://', ''));
+      setActiveAudioTab('tts');
+    } else if (!audioUrl) {
+      setTtsText('');
+    }
+  }, [audioUrl]);
+
+  useEffect(() => {
+    if (videoUrl?.startsWith('youtube://')) {
+      const vidId = videoUrl.replace('youtube://', '');
+      setYtLinkInput(`https://www.youtube.com/watch?v=${vidId}`);
+    } else if (!videoUrl) {
+      setYtLinkInput('');
+    }
+  }, [videoUrl]);
+
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingImage(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'image');
+      formData.append('worksheetId', worksheet?.id || 'new');
+      
+      const res = await fetch('/api/teacher/upload', {
+        method: 'POST',
+        body: formData
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to upload image');
+      }
+      const data = await res.json();
+      setImageUrl(data.url);
+      displayMessage('Image uploaded successfully!', 'success');
+    } catch (err: any) {
+      setError(err.message || 'Image upload failed');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleAudioFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingAudio(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'audio');
+      formData.append('worksheetId', worksheet?.id || 'new');
+      
+      const res = await fetch('/api/teacher/upload', {
+        method: 'POST',
+        body: formData
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to upload audio');
+      }
+      const data = await res.json();
+      setAudioUrl(data.url);
+      displayMessage('Audio uploaded successfully!', 'success');
+    } catch (err: any) {
+      setError(err.message || 'Audio upload failed');
+    } finally {
+      setUploadingAudio(false);
+    }
+  };
+
+  const handleYouTubeLinkChange = (link: string) => {
+    setYtLinkInput(link);
+    if (!link.trim()) {
+      setVideoUrl('');
+      return;
+    }
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = link.match(regExp);
+    const videoId = (match && match[2].length === 11) ? match[2] : null;
+    if (videoId) {
+      setVideoUrl(`youtube://${videoId}`);
+    } else {
+      setVideoUrl(link);
+    }
+  };
+
+  const handleTtsTextChange = (text: string) => {
+    setTtsText(text);
+    if (text.trim()) {
+      setAudioUrl(`tts://${text.trim()}`);
+    } else {
+      setAudioUrl('');
+    }
+  };
   
   // Modal & panel states
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
@@ -493,53 +604,195 @@ export default function WorksheetBuilder({
               ))}
             </div>
           </div>
-
-          {/* Media Attachments Block */}
-          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 shadow-md space-y-4">
+          {/* Worksheet Media & Assets Block */}
+          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 shadow-md space-y-4 animate-scaleUp">
             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-800/65 pb-2">
-              Media Attachments
+              Worksheet Assets
             </h3>
             
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest">
-                  Audio URL (.mp3 / .wav)
+            {/* 1. Image Asset Upload */}
+            <div className="space-y-2">
+              <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest">
+                Image Asset
+              </label>
+              {imageUrl ? (
+                <div className="p-2.5 bg-slate-950/60 border border-slate-900 rounded-xl space-y-2 relative">
+                  <div className="rounded-lg overflow-hidden max-h-[120px] flex items-center justify-center bg-black/20">
+                    <img src={imageUrl} alt="Uploaded preview" className="max-h-[120px] object-contain" />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[8px] text-slate-500 truncate flex-grow font-semibold">{imageUrl}</span>
+                    <button
+                      type="button"
+                      onClick={() => setImageUrl('')}
+                      className="text-[9px] text-red-400 hover:text-red-300 font-bold px-1.5 py-0.5 border border-red-500/10 rounded cursor-pointer bg-slate-900 flex-shrink-0"
+                    >
+                      Remove ✕
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <label className="border border-dashed border-slate-850 hover:border-slate-700 bg-slate-950/40 rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors text-center">
+                  <span className="text-2xl mb-1 select-none">🖼️</span>
+                  <span className="text-[10px] font-bold text-slate-400">
+                    {uploadingImage ? 'Uploading...' : 'Upload Image File'}
+                  </span>
+                  <span className="text-[8px] text-slate-500 font-semibold mt-0.5">PNG, JPEG, WEBP (Max 10MB)</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageFileChange}
+                    className="hidden"
+                    disabled={uploadingImage}
+                  />
                 </label>
-                <input
-                  type="text"
-                  value={audioUrl}
-                  onChange={(e) => setAudioUrl(e.target.value)}
-                  placeholder="https://example.com/audio.mp3"
-                  className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-350 outline-none focus:border-indigo-500 font-bold"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest">
-                  Image URL (.jpeg / .png)
-                </label>
-                <input
-                  type="text"
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
-                  placeholder="https://example.com/image.jpg"
-                  className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-350 outline-none focus:border-indigo-500 font-bold"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest">
-                  YouTube / Video URL
-                </label>
-                <input
-                  type="text"
-                  value={videoUrl}
-                  onChange={(e) => setVideoUrl(e.target.value)}
-                  placeholder="https://youtube.com/watch?v=..."
-                  className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-350 outline-none focus:border-indigo-500 font-bold"
-                />
-              </div>
+              )}
             </div>
+
+            {/* 2. Audio Asset & TTS Generator */}
+            <div className="space-y-2 border-t border-slate-900 pt-3">
+              <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest">
+                Audio Asset
+              </label>
+
+              {audioUrl ? (
+                <div className="p-2.5 bg-slate-950/60 border border-slate-900 rounded-xl space-y-2">
+                  {audioUrl.startsWith('tts://') ? (
+                    <div className="space-y-2">
+                      <TTSProgressBarPlayer text={audioUrl.replace('tts://', '')} showTextPreview={false} />
+                      <textarea
+                        value={ttsText}
+                        onChange={(e) => handleTtsTextChange(e.target.value)}
+                        placeholder="Edit speech synthesis text..."
+                        rows={3}
+                        className="w-full bg-slate-950 border border-slate-900 rounded-lg p-2 text-[10px] text-slate-350 outline-none focus:border-indigo-500 font-medium"
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <span className="text-[8px] text-slate-400 font-bold block truncate">File: {audioUrl}</span>
+                      <audio src={audioUrl} controls className="w-full h-8 rounded-lg mt-1" />
+                    </div>
+                  )}
+                  
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setAudioUrl('')}
+                      className="text-[9px] text-red-400 hover:text-red-300 font-bold px-2 py-1 border border-red-500/10 rounded cursor-pointer bg-slate-900"
+                    >
+                      Remove Audio ✕
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {/* Tab Selector */}
+                  <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-900 text-[10px] font-bold select-none">
+                    <button
+                      type="button"
+                      onClick={() => setActiveAudioTab('upload')}
+                      className={`flex-1 py-1 rounded text-center cursor-pointer transition-colors ${
+                        activeAudioTab === 'upload' ? 'bg-indigo-650 text-white' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Upload File
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveAudioTab('tts')}
+                      className={`flex-1 py-1 rounded text-center cursor-pointer transition-colors ${
+                        activeAudioTab === 'tts' ? 'bg-indigo-650 text-white' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      🗣️ TTS Creator
+                    </button>
+                  </div>
+
+                  {activeAudioTab === 'upload' ? (
+                    <label className="border border-dashed border-slate-850 hover:border-slate-700 bg-slate-950/40 rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors text-center">
+                      <span className="text-2xl mb-1 select-none">🔊</span>
+                      <span className="text-[10px] font-bold text-slate-400">
+                        {uploadingAudio ? 'Uploading...' : 'Upload Audio File'}
+                      </span>
+                      <span className="text-[8px] text-slate-500 font-semibold mt-0.5">MP3, WAV, M4A (Max 10MB)</span>
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        onChange={handleAudioFileChange}
+                        className="hidden"
+                        disabled={uploadingAudio}
+                      />
+                    </label>
+                  ) : (
+                    <div className="space-y-1 bg-slate-950/40 border border-slate-900 p-2 rounded-xl">
+                      <textarea
+                        value={ttsText}
+                        onChange={(e) => handleTtsTextChange(e.target.value)}
+                        placeholder="Type/paste text to create TTS audio..."
+                        rows={3}
+                        className="w-full bg-slate-950 border border-slate-900 rounded-lg p-2 text-[10px] text-slate-350 outline-none focus:border-indigo-500 font-medium placeholder-slate-650"
+                      />
+                      <span className="text-[8px] text-slate-500 font-bold block pt-1 leading-normal">
+                        Type text above to automatically generate TTS audio.
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 3. YouTube Embed Video */}
+            <div className="space-y-2 border-t border-slate-900 pt-3">
+              <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest">
+                Video Asset (YouTube)
+              </label>
+              
+              {videoUrl ? (
+                <div className="p-2.5 bg-slate-950/60 border border-slate-900 rounded-xl space-y-2">
+                  {videoUrl.startsWith('youtube://') ? (
+                    <div className="space-y-1.5">
+                      <span className="text-[8px] text-indigo-400 font-bold block">📺 Embedded YouTube Video</span>
+                      <div className="rounded-lg overflow-hidden aspect-video border border-slate-850 bg-black">
+                        <iframe
+                          src={`https://www.youtube.com/embed/${videoUrl.replace('youtube://', '')}`}
+                          className="w-full h-full border-0"
+                          allowFullScreen
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-[8px] text-slate-450 truncate block font-semibold">{videoUrl}</span>
+                  )}
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVideoUrl('');
+                        setYtLinkInput('');
+                      }}
+                      className="text-[9px] text-red-400 hover:text-red-300 font-bold px-2 py-1 border border-red-500/10 rounded cursor-pointer bg-slate-900"
+                    >
+                      Remove Video ✕
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <input
+                    type="text"
+                    value={ytLinkInput}
+                    onChange={(e) => handleYouTubeLinkChange(e.target.value)}
+                    placeholder="https://youtube.com/watch?v=..."
+                    className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3 py-2 text-xs text-slate-350 outline-none focus:border-indigo-500 font-bold placeholder-slate-650"
+                  />
+                  <span className="text-[8px] text-slate-500 font-bold block pt-1 leading-normal">
+                    Paste YouTube URL to embed video player.
+                  </span>
+                </div>
+              )}
+            </div>
+
           </div>
         </div>
 

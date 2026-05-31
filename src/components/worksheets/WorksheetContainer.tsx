@@ -16,6 +16,21 @@ import MatchingPairs from './MatchingPairs';
 import WordSearch from './WordSearch';
 import DialogueRenderer from './DialogueRenderer';
 import OrderSentences from './OrderSentences';
+import TTSProgressBarPlayer from './TTSProgressBarPlayer';
+
+function getYouTubeEmbedUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith('youtube://')) {
+    const id = url.replace('youtube://', '');
+    return `https://www.youtube.com/embed/${id}`;
+  }
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const match = url.match(regExp);
+  if (match && match[2].length === 11) {
+    return `https://www.youtube.com/embed/${match[2]}`;
+  }
+  return null;
+}
 
 interface WorksheetContainerProps {
   worksheet: {
@@ -405,18 +420,40 @@ export default function WorksheetContainer({ worksheet, studentId = '', previewM
 
           {/* 2. Audio Embed */}
           {worksheet.audioUrl && (
-            <div className="p-2 bg-slate-900/50 rounded-xl flex items-center gap-3">
-              <span className="text-lg">🔊</span>
-              <audio src={worksheet.audioUrl} controls className="flex-1 h-9 rounded-lg" />
-            </div>
+            worksheet.audioUrl.startsWith('tts://') ? (
+              <div className="p-1">
+                <TTSProgressBarPlayer text={worksheet.audioUrl.replace('tts://', '')} showTextPreview={false} />
+              </div>
+            ) : (
+              <div className="p-2 bg-slate-900/50 rounded-xl flex items-center gap-3">
+                <span className="text-lg">🔊</span>
+                <audio src={worksheet.audioUrl} controls className="flex-1 h-9 rounded-lg" />
+              </div>
+            )
           )}
 
           {/* 3. Video Embed */}
-          {worksheet.videoUrl && (
-            <div className="rounded-xl overflow-hidden bg-black/40 aspect-video max-h-[260px] mx-auto">
-              <video src={worksheet.videoUrl} controls className="w-full h-full object-contain" />
-            </div>
-          )}
+          {worksheet.videoUrl && (() => {
+            const ytEmbedUrl = getYouTubeEmbedUrl(worksheet.videoUrl);
+            if (ytEmbedUrl) {
+              return (
+                <div className="rounded-xl overflow-hidden bg-black/40 aspect-video w-full max-w-2xl mx-auto border border-slate-800">
+                  <iframe
+                    src={ytEmbedUrl}
+                    className="w-full h-full animate-fadeIn"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    title={worksheet.title}
+                  />
+                </div>
+              );
+            }
+            return (
+              <div className="rounded-xl overflow-hidden bg-black/40 aspect-video max-h-[260px] mx-auto border border-slate-800">
+                <video src={worksheet.videoUrl} controls className="w-full h-full object-contain" />
+              </div>
+            );
+          })()}
 
           {/* 4. Transcript Block */}
           {worksheet.transcript && (

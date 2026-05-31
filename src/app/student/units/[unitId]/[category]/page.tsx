@@ -89,32 +89,108 @@ export default async function UnitCategoryPage({ params }: CategoryPageProps) {
     };
   });
 
-  // Calculate unlocks sequentially
+  // Calculate unlocks based on difficulty tiers
   const isPreview = session.role === 'TEACHER' || session.role === 'ADMIN';
-  if (worksheetStatuses.length > 0) {
-    worksheetStatuses[0].unlocked = true; // First worksheet is always unlocked
-    if (isPreview) {
-      // Teachers/admins see all worksheets unlocked in preview mode
-      for (let i = 1; i < worksheetStatuses.length; i++) {
-        worksheetStatuses[i].unlocked = true;
-      }
-    } else {
-      for (let i = 1; i < worksheetStatuses.length; i++) {
-        if (worksheetStatuses[i - 1].passed) {
-          worksheetStatuses[i].unlocked = true;
-        }
-      }
-    }
-  }
+  
+  const explorerWorksheets = worksheetStatuses.filter(s => s.ws.tier === 'EXPLORER');
+  const voyagerWorksheets = worksheetStatuses.filter(s => s.ws.tier === 'VOYAGER');
+  const challengerWorksheets = worksheetStatuses.filter(s => s.ws.tier === 'CHALLENGER');
 
-  // The Summit unlocks if all standard worksheets are passed
-  const allPassed = worksheetStatuses.length > 0 && worksheetStatuses.every((status) => status.passed);
-  const isSummitUnlocked = allPassed || isPreview;
+  const isExplorerUnlocked = true;
+  const isVoyagerUnlocked = isPreview || explorerWorksheets.length === 0 || explorerWorksheets.some(s => s.passed);
+  const isChallengerUnlocked = isPreview || (isVoyagerUnlocked && (voyagerWorksheets.length === 0 || voyagerWorksheets.some(s => s.passed)));
+  const isSummitUnlocked = isPreview || (isChallengerUnlocked && (challengerWorksheets.length === 0 || challengerWorksheets.some(s => s.passed)));
+
+  worksheetStatuses.forEach((status) => {
+    if (status.ws.tier === 'EXPLORER') {
+      status.unlocked = isExplorerUnlocked;
+    } else if (status.ws.tier === 'VOYAGER') {
+      status.unlocked = isVoyagerUnlocked;
+    } else if (status.ws.tier === 'CHALLENGER') {
+      status.unlocked = isChallengerUnlocked;
+    } else {
+      status.unlocked = true;
+    }
+  });
+
   const isSummitGenerated = !!summitWorksheet;
   const isSummitPassed = summitWorksheet
     ? ((db.prepare('SELECT MAX(score) as max_score FROM attempts WHERE student_id = ? AND worksheet_id = ?')
         .get(session.userId, summitWorksheet.id) as any)?.max_score || 0) >= 80
     : false;
+
+  const renderWorksheetRow = (status: typeof worksheetStatuses[0]) => {
+    const { ws, passed, score, unlocked } = status;
+    if (!ws) return null;
+    return (
+      <div
+        key={ws.id}
+        className={`flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-8 transition-all p-5 rounded-2xl border ${
+          passed
+            ? 'bg-emerald-950/15 border-emerald-500/20'
+            : unlocked
+            ? 'bg-slate-900/40 border-slate-800/80 hover:border-indigo-500/25'
+            : 'bg-slate-950/10 border-slate-900/60 opacity-50'
+        }`}
+      >
+        {/* Status circle/badge */}
+        <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center border font-black text-xs select-none shadow-md bg-slate-950 border-slate-850">
+          {passed ? (
+            <span className="text-lg filter drop-shadow-sm select-none">{ws.badge_emoji || '🥇'}</span>
+          ) : unlocked ? (
+            <span className="text-indigo-400 font-extrabold">▶️</span>
+          ) : (
+            <span className="text-slate-600">🔒</span>
+          )}
+        </div>
+
+        {/* Info panel */}
+        <div className="flex-grow text-left space-y-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h4 className="text-sm font-extrabold text-white tracking-tight">{ws.title}</h4>
+            {passed && (
+              <span className="text-[9px] bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-extrabold px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                ✓ Completed
+              </span>
+            )}
+          </div>
+          <p className="text-slate-500 text-[11px] font-medium">
+            {passed 
+              ? 'Passed! Feel free to practice again to review.' 
+              : 'Earn a score of 80% or higher to unlock the next level.'}
+          </p>
+        </div>
+
+        {/* Score & Start Button */}
+        <div className="flex items-center gap-4 justify-between w-full md:w-auto mt-2 md:mt-0">
+          {score > 0 && (
+            <div className="text-right flex-shrink-0">
+              <span className="block text-[8px] text-slate-500 font-bold uppercase tracking-wider">Best Score</span>
+              <span className={`text-xs font-black ${passed ? 'text-emerald-400' : 'text-amber-400'}`}>
+                {score}%
+              </span>
+            </div>
+          )}
+
+          {unlocked ? (
+            <Link
+              href={`/student/worksheets/${ws.id}`}
+              className="bg-indigo-650 hover:bg-indigo-500 text-white font-extrabold text-[10px] uppercase tracking-wider py-2 px-4 rounded-xl border border-indigo-500/20 transition-all cursor-pointer select-none text-center"
+            >
+              {passed ? 'Practice' : 'Start'}
+            </Link>
+          ) : (
+            <button
+              disabled
+              className="bg-slate-900 border border-slate-850 text-slate-600 font-extrabold text-[10px] uppercase tracking-wider py-2 px-4 rounded-xl cursor-not-allowed select-none text-center"
+            >
+              Locked
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans relative overflow-hidden flex flex-col">
@@ -200,10 +276,6 @@ export default async function UnitCategoryPage({ params }: CategoryPageProps) {
         {/* The Roadmap Trails */}
         <div className="flex flex-col gap-6 relative">
           
-          {/* Timeline Connector Line */}
-          <div className="absolute left-[36px] top-6 bottom-6 w-0.5 bg-gradient-to-b from-indigo-500 to-slate-800 pointer-events-none hidden md:block" />
-
-          {/* Empty State */}
           {worksheetStatuses.length === 0 ? (
             <div className="p-16 bg-slate-900/20 border border-dashed border-slate-800 rounded-3xl text-center">
               <span className="text-4xl block filter grayscale opacity-45 select-none mb-3">📋</span>
@@ -211,140 +283,163 @@ export default async function UnitCategoryPage({ params }: CategoryPageProps) {
               <p className="text-slate-500 text-xs mt-1">There are no worksheets created under this unit category yet.</p>
             </div>
           ) : (
-            worksheetStatuses.map((status, index) => {
-              const { ws, passed, score, unlocked } = status;
-              if (!ws) return null;
+            <div className="space-y-8">
+              {/* 1. EXPLORER TIER (EASY) */}
+              <div className="space-y-3 bg-slate-900/10 border border-slate-900/60 rounded-3xl p-5 shadow-sm">
+                <div className="flex items-center justify-between border-b border-slate-900 pb-3 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400 select-none">🟢</span>
+                    <span className="text-xs font-black text-emerald-400 uppercase tracking-widest">Explorer (Easy)</span>
+                  </div>
+                  <span className="text-[9px] bg-emerald-500/10 text-emerald-400 font-black px-2 py-0.5 rounded border border-emerald-500/20 uppercase tracking-wider">
+                    Unlocked
+                  </span>
+                </div>
+                
+                <div className="space-y-2.5">
+                  {explorerWorksheets.length === 0 ? (
+                    <p className="text-[11px] text-slate-500 font-semibold italic pl-1">No Explorer level worksheets available.</p>
+                  ) : (
+                    explorerWorksheets.map(renderWorksheetRow)
+                  )}
+                </div>
+              </div>
 
-              return (
+              {/* 2. VOYAGER TIER (MEDIUM) */}
+              <div className={`space-y-3 bg-slate-900/10 border border-slate-900/60 rounded-3xl p-5 shadow-sm transition-all ${
+                !isVoyagerUnlocked ? 'opacity-50' : ''
+              }`}>
+                <div className="flex items-center justify-between border-b border-slate-900 pb-3 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-indigo-400 select-none">🔵</span>
+                    <span className="text-xs font-black text-indigo-400 uppercase tracking-widest">Voyager (Medium)</span>
+                  </div>
+                  <span className={`text-[9px] font-black px-2 py-0.5 rounded border uppercase tracking-wider ${
+                    isVoyagerUnlocked
+                      ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
+                      : 'bg-slate-900 text-slate-550 border-slate-850'
+                  }`}>
+                    {isVoyagerUnlocked ? 'Unlocked' : 'Locked'}
+                  </span>
+                </div>
+
+                <div className="space-y-2.5">
+                  {voyagerWorksheets.length === 0 ? (
+                    <p className="text-[11px] text-slate-500 font-semibold italic pl-1">No Voyager level worksheets available.</p>
+                  ) : (
+                    voyagerWorksheets.map(renderWorksheetRow)
+                  )}
+                </div>
+              </div>
+
+              {/* 3. CHALLENGER TIER (HARD) */}
+              <div className={`space-y-3 bg-slate-900/10 border border-slate-900/60 rounded-3xl p-5 shadow-sm transition-all ${
+                !isChallengerUnlocked ? 'opacity-50' : ''
+              }`}>
+                <div className="flex items-center justify-between border-b border-slate-900 pb-3 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-amber-400 select-none">🔴</span>
+                    <span className="text-xs font-black text-amber-400 uppercase tracking-widest">Challenger (Hard)</span>
+                  </div>
+                  <span className={`text-[9px] font-black px-2 py-0.5 rounded border uppercase tracking-wider ${
+                    isChallengerUnlocked
+                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                      : 'bg-slate-900 text-slate-550 border-slate-850'
+                  }`}>
+                    {isChallengerUnlocked ? 'Unlocked' : 'Locked'}
+                  </span>
+                </div>
+
+                <div className="space-y-2.5">
+                  {challengerWorksheets.length === 0 ? (
+                    <p className="text-[11px] text-slate-500 font-semibold italic pl-1">No Challenger level worksheets available.</p>
+                  ) : (
+                    challengerWorksheets.map(renderWorksheetRow)
+                  )}
+                </div>
+              </div>
+
+              {/* 4. SUMMIT FINISHER LEVEL */}
+              <div className={`space-y-3 bg-slate-900/10 border border-slate-900/60 rounded-3xl p-5 shadow-sm transition-all ${
+                !isSummitUnlocked ? 'opacity-50' : ''
+              }`}>
+                <div className="flex items-center justify-between border-b border-slate-900 pb-3 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-violet-400 select-none">👑</span>
+                    <span className="text-xs font-black text-violet-400 uppercase tracking-widest">AI Summit Challenge</span>
+                  </div>
+                  <span className={`text-[9px] font-black px-2 py-0.5 rounded border uppercase tracking-wider ${
+                    isSummitUnlocked
+                      ? 'bg-violet-500/10 text-violet-400 border-violet-500/20 animate-pulse'
+                      : 'bg-slate-900 text-slate-550 border-slate-850'
+                  }`}>
+                    {isSummitUnlocked ? 'Unlocked' : 'Locked'}
+                  </span>
+                </div>
+
                 <div
-                  key={ws.id}
-                  className={`flex flex-col md:flex-row items-start gap-4 md:gap-8 transition-all p-5 rounded-2xl border ${
-                    passed
-                      ? 'bg-emerald-950/20 border-emerald-500/30'
-                      : unlocked
-                      ? 'bg-slate-900/40 border-slate-800'
-                      : 'bg-slate-950/20 border-slate-900 opacity-55'
+                  className={`flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-8 transition-all p-5 rounded-2xl border ${
+                    isSummitPassed
+                      ? 'bg-emerald-950/15 border-emerald-500/20 shadow-md shadow-emerald-950/5'
+                      : isSummitUnlocked
+                      ? 'bg-gradient-to-r from-slate-900/60 via-indigo-950/15 to-slate-900/60 border-indigo-500/25 shadow-md'
+                      : 'bg-slate-950/10 border-slate-900/60 opacity-55'
                   }`}
                 >
-                  {/* Timeline Circle */}
-                  <div className="flex-shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center border font-black text-sm z-10 mx-auto md:mx-0 select-none shadow-md bg-slate-950 border-slate-800">
-                    {passed ? (
-                      <span className="text-xl filter drop-shadow-sm select-none">{ws.badge_emoji || '🥇'}</span>
-                    ) : unlocked ? (
-                      <span className="text-indigo-400">0{index + 1}</span>
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center border font-black text-sm z-10 select-none shadow-md bg-slate-950 border-slate-850">
+                    {isSummitPassed ? (
+                      <span className="text-lg filter drop-shadow-sm select-none">🏆</span>
+                    ) : isSummitUnlocked ? (
+                      <span className="text-amber-400 text-lg">👑</span>
                     ) : (
                       <span className="text-slate-600">🔒</span>
                     )}
                   </div>
 
-                  {/* Info & Action Panel */}
-                  <div className="flex-grow text-center md:text-left space-y-1">
-                    <div className="flex flex-col md:flex-row md:items-center gap-1.5 justify-center md:justify-start">
-                      <h4 className="text-base font-extrabold text-white tracking-tight">{ws.title}</h4>
-                      <span className="text-[10px] bg-slate-950/60 border border-slate-800 font-bold px-2 py-0.5 rounded text-slate-400 w-fit mx-auto md:mx-0">
-                        {ws.tier}
-                      </span>
+                  <div className="flex-grow text-left space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-sm font-extrabold text-white tracking-tight">AI Summit Finisher</h4>
+                      {isSummitPassed && (
+                        <span className="text-[9px] bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-extrabold px-1.5 py-0.5 rounded">
+                          🏆 Gold Badge Awarded
+                        </span>
+                      )}
                     </div>
-                    <p className="text-slate-500 text-xs">
-                      Complete this level with a score of 80% or higher to progress.
+                    <p className="text-slate-500 text-[11px] font-medium leading-relaxed">
+                      An individualized challenge generated by AI focusing only on the specific elements you struggled with.
                     </p>
                   </div>
 
-                  {/* Score & Play Button */}
-                  <div className="flex items-center gap-4 justify-between w-full md:w-auto mt-4 md:mt-0">
-                    {score > 0 && (
-                      <div className="text-right">
-                        <span className="block text-[8px] text-slate-500 font-bold uppercase">Best Score</span>
-                        <span className={`text-sm font-black ${passed ? 'text-emerald-400' : 'text-amber-400'}`}>
-                          {score}%
-                        </span>
-                      </div>
-                    )}
-
-                    {unlocked ? (
-                      <Link
-                        href={`/student/worksheets/${ws.id}`}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2 px-5 rounded-xl border border-indigo-500/20 transition-all cursor-pointer"
-                      >
-                        {passed ? 'Practice Again' : 'Start Challenge'}
-                      </Link>
+                  <div className="flex items-center gap-4 justify-between w-full md:w-auto mt-2 md:mt-0 flex-shrink-0">
+                    {isSummitUnlocked ? (
+                      isSummitGenerated ? (
+                        <Link
+                          href={`/student/worksheets/${summitWorksheet.id}`}
+                          className="bg-indigo-650 hover:bg-indigo-500 text-white font-extrabold text-[10px] uppercase tracking-wider py-2 px-4 rounded-xl border border-indigo-500/20 transition-all cursor-pointer text-center select-none"
+                        >
+                          {isSummitPassed ? 'Practice' : 'Start'}
+                        </Link>
+                      ) : (
+                        <SummitGeneratorButton
+                          studentId={session.userId}
+                          categoryId={categoryRecord.id}
+                          unitId={unitId}
+                          categoryName={category}
+                        />
+                      )
                     ) : (
                       <button
                         disabled
-                        className="bg-slate-900 border border-slate-800 text-slate-600 font-bold text-xs py-2 px-5 rounded-xl cursor-not-allowed select-none"
+                        className="bg-slate-900 border border-slate-850 text-slate-650 font-extrabold text-[10px] uppercase tracking-wider py-2 px-4 rounded-xl cursor-not-allowed select-none text-center"
                       >
                         Locked
                       </button>
                     )}
                   </div>
                 </div>
-              );
-            })
-          )}
-
-          {/* Summit Finisher Level */}
-          <div
-            className={`flex flex-col md:flex-row items-start gap-4 md:gap-8 transition-all p-5 rounded-2xl border ${
-              isSummitPassed
-                ? 'bg-emerald-950/20 border-emerald-500/30'
-                : isSummitUnlocked
-                ? 'bg-gradient-to-r from-slate-900 via-indigo-950/30 to-slate-900 border-indigo-500/30 animate-pulse-border'
-                : 'bg-slate-950/20 border-slate-900 opacity-55'
-            }`}
-          >
-            {/* Timeline Circle */}
-            <div className="flex-shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center border font-black text-sm z-10 mx-auto md:mx-0 select-none shadow-md">
-              {isSummitPassed ? (
-                <span className="text-emerald-400 text-lg">✓</span>
-              ) : isSummitUnlocked ? (
-                <span className="text-amber-400 text-lg">👑</span>
-              ) : (
-                <span className="text-slate-600">🔒</span>
-              )}
-            </div>
-
-            {/* Info Panel */}
-            <div className="flex-grow text-center md:text-left space-y-1">
-              <div className="flex flex-col md:flex-row md:items-center gap-1.5 justify-center md:justify-start">
-                <h4 className="text-base font-extrabold text-white tracking-tight">AI Summit Finisher</h4>
-                <span className="text-[10px] bg-indigo-500/20 border border-indigo-500/10 font-bold px-2 py-0.5 rounded text-indigo-300 w-fit mx-auto md:mx-0">
-                  SUMMIT
-                </span>
               </div>
-              <p className="text-slate-500 text-xs">
-                An individualized challenge generated by AI focusing only on the specific elements you struggled with.
-              </p>
             </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-4 justify-between w-full md:w-auto mt-4 md:mt-0">
-              {isSummitUnlocked ? (
-                isSummitGenerated ? (
-                  <Link
-                    href={`/student/worksheets/${summitWorksheet.id}`}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2 px-5 rounded-xl border border-indigo-500/20 transition-all cursor-pointer"
-                  >
-                    {isSummitPassed ? 'Practice Again' : 'Start Summit'}
-                  </Link>
-                ) : (
-                  <SummitGeneratorButton
-                    studentId={session.userId}
-                    categoryId={categoryRecord.id}
-                    unitId={unitId}
-                    categoryName={category}
-                  />
-                )
-              ) : (
-                <button
-                  disabled
-                  className="bg-slate-900 border border-slate-800 text-slate-600 font-bold text-xs py-2 px-5 rounded-xl cursor-not-allowed select-none"
-                >
-                  Locked
-                </button>
-              )}
-            </div>
-          </div>
-
+          )}
         </div>
 
         {/* Back link */}

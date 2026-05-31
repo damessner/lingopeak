@@ -26,16 +26,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
     }
 
-    // Validate worksheetId as a UUID to prevent path injection/directory traversal
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(worksheetId)) {
-      return NextResponse.json({ error: 'Invalid worksheet ID format' }, { status: 400 });
-    }
+    const isNewWorksheet = worksheetId === 'new' || worksheetId.startsWith('new_');
+    if (!isNewWorksheet) {
+      // Validate worksheetId as a UUID to prevent path injection/directory traversal
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(worksheetId)) {
+        return NextResponse.json({ error: 'Invalid worksheet ID format' }, { status: 400 });
+      }
 
-    // Check if worksheet exists
-    const worksheet = db.prepare('SELECT id FROM worksheets WHERE id = ?').get(worksheetId);
-    if (!worksheet) {
-      return NextResponse.json({ error: 'Worksheet not found' }, { status: 404 });
+      // Check if worksheet exists
+      const worksheet = db.prepare('SELECT id FROM worksheets WHERE id = ?').get(worksheetId);
+      if (!worksheet) {
+        return NextResponse.json({ error: 'Worksheet not found' }, { status: 404 });
+      }
     }
 
     // Case A: Transcript update (plain text, no file upload)
@@ -102,12 +105,14 @@ export async function POST(request: NextRequest) {
     const fileUrl = `/uploads/${filename}`;
 
     // Update corresponding worksheet column in SQLite
-    if (uploadType === 'audio') {
-      db.prepare('UPDATE worksheets SET audio_url = ? WHERE id = ?').run(fileUrl, worksheetId);
-    } else if (uploadType === 'image') {
-      db.prepare('UPDATE worksheets SET image_url = ? WHERE id = ?').run(fileUrl, worksheetId);
-    } else if (uploadType === 'video') {
-      db.prepare('UPDATE worksheets SET video_url = ? WHERE id = ?').run(fileUrl, worksheetId);
+    if (!isNewWorksheet) {
+      if (uploadType === 'audio') {
+        db.prepare('UPDATE worksheets SET audio_url = ? WHERE id = ?').run(fileUrl, worksheetId);
+      } else if (uploadType === 'image') {
+        db.prepare('UPDATE worksheets SET image_url = ? WHERE id = ?').run(fileUrl, worksheetId);
+      } else if (uploadType === 'video') {
+        db.prepare('UPDATE worksheets SET video_url = ? WHERE id = ?').run(fileUrl, worksheetId);
+      }
     }
 
     return NextResponse.json({ success: true, url: fileUrl });
