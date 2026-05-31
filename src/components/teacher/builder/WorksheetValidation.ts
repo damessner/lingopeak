@@ -78,6 +78,12 @@ export function validateQuestion(q: Question, index: number): string | null {
       if (!q.text?.trim() || !q.mistake?.trim() || !q.correction?.trim()) {
         return `${label} (Correct the Mistake) must contain an inline mistake e.g., 'incorrect#correct' (e.g. He do#does his homework).`;
       }
+      const cleanText = q.text.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "");
+      const cleanWords = cleanText.split(/\s+/);
+      const cleanMistake = q.mistake.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "");
+      if (!cleanWords.includes(cleanMistake)) {
+        return `${label} (Correct the Mistake) mistake word must match one of the words in the sentence.`;
+      }
       break;
     }
 

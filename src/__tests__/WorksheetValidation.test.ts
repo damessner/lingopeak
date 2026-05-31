@@ -32,7 +32,7 @@ test('WorksheetValidation - Multiple Choice', () => {
     ...validMC,
     options: ['A', 'B', '', 'D']
   } as any as Question;
-  assert.match(validateQuestion(invalidMCOpts, 0) || '', /must have all 4 options filled out/);
+  assert.match(validateQuestion(invalidMCOpts, 0) || '', /must have all options filled out/);
 
   // Invalid - missing answer
   const invalidMCAns = {
@@ -64,7 +64,7 @@ test('WorksheetValidation - Fill in the Gap', () => {
     ...validGap,
     text: 'He is a student.'
   } as any as Question;
-  assert.match(validateQuestion(invalidGapBrackets, 0) || '', /must contain at least one gap in square brackets/);
+  assert.match(validateQuestion(invalidGapBrackets, 0) || '', /must contain at least one gap wrapped in # \(e.g. #drives#\) or square brackets/);
 });
 
 test('WorksheetValidation - Sentence Unscramble', () => {
@@ -133,7 +133,7 @@ test('WorksheetValidation - Drag & Drop', () => {
     ...validDnD,
     sentences: ['She likes apples.']
   } as any as Question;
-  assert.match(validateQuestion(invalidDnDBrackets, 0) || '', /must have at least one slot wrapped in brackets/);
+  assert.match(validateQuestion(invalidDnDBrackets, 0) || '', /must have at least one slot wrapped in # \(e.g. #green#\) or brackets/);
 });
 
 test('WorksheetValidation - Category Sorting', () => {
@@ -162,14 +162,14 @@ test('WorksheetValidation - Category Sorting', () => {
     ...validSorting,
     items: []
   } as any as Question;
-  assert.match(validateQuestion(invalidSortingItems, 0) || '', /must contain valid items matched to sorting bins/);
+  assert.match(validateQuestion(invalidSortingItems, 0) || '', /must contain valid items matched to sorting categories/);
 
   // Invalid - invalid item structure
   const invalidSortingItemStruct = {
     ...validSorting,
     items: [{ text: 'Apple', category: '' }]
   } as any as Question;
-  assert.match(validateQuestion(invalidSortingItemStruct, 0) || '', /must contain valid items matched to sorting bins/);
+  assert.match(validateQuestion(invalidSortingItemStruct, 0) || '', /must contain valid items matched to sorting categories/);
 });
 
 test('WorksheetValidation - Correct the Mistake', () => {
@@ -200,7 +200,7 @@ test('WorksheetValidation - Correct the Mistake', () => {
     ...validMistake,
     correction: ''
   } as any as Question;
-  assert.match(validateQuestion(invalidMistakeMissing, 0) || '', /sentence, mistake, and correction words are all required/);
+  assert.match(validateQuestion(invalidMistakeMissing, 0) || '', /must contain an inline mistake/);
 
   // Invalid - mistake word not in sentence
   const invalidMistakeMismatch = {
@@ -227,14 +227,14 @@ test('WorksheetValidation - Choice Matrix', () => {
     ...validMatrix,
     rows: []
   } as any as Question;
-  assert.match(validateQuestion(invalidMatrixEmpty, 0) || '', /must have rows and columns tags defined/);
+  assert.match(validateQuestion(invalidMatrixEmpty, 0) || '', /must have rows and columns defined/);
 
   // Invalid - missing answers
   const invalidMatrixAnswers = {
     ...validMatrix,
     answers: { 'Row 1': 'Col 1' }
   } as any as Question;
-  assert.match(validateQuestion(invalidMatrixAnswers, 0) || '', /must have correct column selections selected for all rows/);
+  assert.match(validateQuestion(invalidMatrixAnswers, 0) || '', /must map a correct column for all rows/);
 });
 
 test('WorksheetValidation - Crossword', () => {
