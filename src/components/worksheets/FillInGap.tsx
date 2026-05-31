@@ -16,9 +16,9 @@ export default function FillInGap({ question, value, onChange }: FillInGapProps)
   const text = question.text;
   const gapValues = value || {};
 
-  // Regex to split by brackets e.g. [drives]
-  // Match brackets and return them in the split results
-  const parts = text.split(/(\[[^\]]+\])/g);
+  // Support both brackets and hashes by normalizing hashes to brackets
+  const normalizedText = text.replace(/#([^#]+)#/g, '[$1]');
+  const parts = normalizedText.split(/(\[[^\]]+\])/g);
 
   let gapCounter = 0;
 

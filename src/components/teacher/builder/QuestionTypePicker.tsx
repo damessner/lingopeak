@@ -10,6 +10,7 @@ export const QUESTION_TYPES_META = [
   { id: 'correct_the_mistake', name: 'Correct the Mistake', icon: '❌', desc: 'Identify a wrong word and type correction.' },
   { id: 'choice_matrix', name: 'Choice Matrix Grid', icon: '📊', desc: 'Map row options to correct columns.' },
   { id: 'sentence_unscramble', name: 'Sentence Unscramble', icon: '🧩', desc: 'Rearrange mixed-up words in order.' },
+  { id: 'order_sentences', name: 'Sentence Ordering', icon: '↕️', desc: 'Sort mixed sentences in correct order.' },
   { id: 'matching_pairs', name: 'Matching Pairs', icon: '🔗', desc: 'Link corresponding item pairs together.' },
   { id: 'crossword', name: 'Crossword Puzzle', icon: '🔠', desc: 'Spelling puzzle generated from clues.' },
   { id: 'word_search', name: 'Word Search Grid', icon: '🔍', desc: 'Find words hidden in a letter grid.' }

@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
     // Fetch worksheets with category details
     const worksheets = db.prepare(`
       SELECT w.id, w.title, w.tier, w.category_id, w.questions_json, w.created_at, w.badge_emoji,
+             w.audio_url, w.image_url, w.video_url,
              c.name as category_name, u.title as unit_title
       FROM worksheets w
       LEFT JOIN categories c ON w.category_id = c.id
@@ -44,7 +45,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { cloneId, id, title, categoryId, tier, questions, badgeEmoji } = body;
+    const { cloneId, id, title, categoryId, tier, questions, badgeEmoji, audioUrl, imageUrl, videoUrl, audio_url, image_url, video_url } = body;
+
+    const finalAudioUrl = audioUrl !== undefined ? audioUrl : (audio_url !== undefined ? audio_url : null);
+    const finalImageUrl = imageUrl !== undefined ? imageUrl : (image_url !== undefined ? image_url : null);
+    const finalVideoUrl = videoUrl !== undefined ? videoUrl : (video_url !== undefined ? video_url : null);
 
     if (cloneId) {
       const original = db.prepare('SELECT * FROM worksheets WHERE id = ?').get(cloneId) as any;
@@ -53,8 +58,8 @@ export async function POST(request: NextRequest) {
       }
       const newId = crypto.randomUUID();
       const newTitle = `${original.title} (Copy)`;
-      db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json, badge_emoji) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(newId, original.category_id, newTitle, original.tier, original.questions_json, original.badge_emoji || '🥇');
+      db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json, badge_emoji, audio_url, image_url, video_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(newId, original.category_id, newTitle, original.tier, original.questions_json, original.badge_emoji || '🥇', original.audio_url, original.image_url, original.video_url);
       return NextResponse.json({ success: true, id: newId });
     }
 
@@ -95,15 +100,15 @@ export async function POST(request: NextRequest) {
       }
 
       // Update
-      db.prepare('UPDATE worksheets SET title = ?, category_id = ?, tier = ?, questions_json = ?, badge_emoji = ? WHERE id = ?')
-        .run(title, categoryId, tier, questionsJson, badgeEmoji || '🥇', id);
+      db.prepare('UPDATE worksheets SET title = ?, category_id = ?, tier = ?, questions_json = ?, badge_emoji = ?, audio_url = ?, image_url = ?, video_url = ? WHERE id = ?')
+        .run(title, categoryId, tier, questionsJson, badgeEmoji || '🥇', finalAudioUrl, finalImageUrl, finalVideoUrl, id);
 
       return NextResponse.json({ success: true, id });
     } else {
       // Create new
       const newId = crypto.randomUUID();
-      db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json, badge_emoji) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(newId, categoryId, title, tier, questionsJson, badgeEmoji || '🥇');
+      db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json, badge_emoji, audio_url, image_url, video_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(newId, categoryId, title, tier, questionsJson, badgeEmoji || '🥇', finalAudioUrl, finalImageUrl, finalVideoUrl);
 
       return NextResponse.json({ success: true, id: newId });
     }

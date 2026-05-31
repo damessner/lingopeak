@@ -1,6 +1,7 @@
 'use client';
 
 import { CategorySortingQuestion } from '@/lib/worksheet-types';
+import AutoExpandingTextarea from '../AutoExpandingTextarea';
 
 interface CategorySortingEditorProps {
   question: CategorySortingQuestion;
@@ -9,84 +10,133 @@ interface CategorySortingEditorProps {
 
 export default function CategorySortingEditor({ question, onChange }: CategorySortingEditorProps) {
   const categories = question.categories || [];
-  const categories_raw = question.categories_raw || '';
   const items = question.items || [];
 
-  const handleCategoriesRawChange = (val: string) => {
-    const list = val.split(',').map(s => s.trim()).filter(Boolean);
+  // Group items by category title for rendering
+  const itemsByCategory: Record<string, string[]> = {};
+  categories.forEach(cat => {
+    itemsByCategory[cat] = items
+      .filter(item => item.category === cat)
+      .map(item => item.text);
+  });
+
+  const handleAddCategory = () => {
+    const newCatName = `Category ${categories.length + 1}`;
+    const updatedCategories = [...categories, newCatName];
     onChange({
-      categories_raw: val,
-      categories: list
+      categories: updatedCategories
     });
   };
 
-  const handleAddSortingItem = () => {
-    onChange({ items: [...items, { text: '', category: '' }] });
+  const handleRemoveCategory = (catToRemove: string) => {
+    const updatedCategories = categories.filter(c => c !== catToRemove);
+    const updatedItems = items.filter(item => item.category !== catToRemove);
+    onChange({
+      categories: updatedCategories,
+      items: updatedItems
+    });
   };
 
-  const handleRemoveSortingItem = (iIdx: number) => {
-    onChange({ items: items.filter((_, i) => i !== iIdx) });
+  const handleCategoryTitleChange = (oldTitle: string, newTitle: string) => {
+    if (!newTitle.trim()) return;
+    
+    // Update categories list
+    const updatedCategories = categories.map(c => c === oldTitle ? newTitle : c);
+    
+    // Update category name in items mapping
+    const updatedItems = items.map(item => {
+      if (item.category === oldTitle) {
+        return { ...item, category: newTitle };
+      }
+      return item;
+    });
+
+    onChange({
+      categories: updatedCategories,
+      items: updatedItems
+    });
   };
 
-  const handleSortingItemChange = (iIdx: number, field: 'text' | 'category', val: string) => {
-    const updatedItems = [...items];
-    updatedItems[iIdx] = { ...updatedItems[iIdx], [field]: val };
-    onChange({ items: updatedItems });
+  const handleCategoryItemsChange = (catTitle: string, rawText: string) => {
+    // Split input lines and filter out empty ones
+    const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+
+    // Keep items from other categories, and append newly parsed items for this category
+    const otherItems = items.filter(item => item.category !== catTitle);
+    const parsedItems = lines.map(line => ({
+      text: line,
+      category: catTitle
+    }));
+
+    onChange({
+      items: [...otherItems, ...parsedItems]
+    });
   };
 
   return (
-    <div className="space-y-3 pt-2">
-      <div className="space-y-1">
-        <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Sorting Categories (comma separated)</label>
-        <input
-          type="text"
-          value={categories_raw}
-          onChange={(e) => handleCategoriesRawChange(e.target.value)}
-          placeholder="e.g. Nouns, Verbs, Adjectives"
-          className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-bold outline-none"
-        />
-      </div>
+    <div className="space-y-4 pt-2">
       <div className="flex justify-between items-center">
-        <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Sorting Items</label>
+        <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">
+          Sorting Categories & Items
+        </label>
         <button
           type="button"
-          onClick={handleAddSortingItem}
-          className="text-[9px] font-black bg-indigo-650/20 hover:bg-indigo-650/40 text-indigo-300 py-1.5 px-3 rounded-lg border border-indigo-500/10 cursor-pointer"
+          onClick={handleAddCategory}
+          className="text-[9px] font-black bg-indigo-650/20 hover:bg-indigo-650/40 text-indigo-300 py-1.5 px-3 rounded-lg border border-indigo-500/10 cursor-pointer transition-colors"
         >
-          + Add Item
+          + Add Category Bin
         </button>
       </div>
-      <div className="space-y-2">
-        {items.map((item, iIdx) => (
-          <div key={iIdx} className="flex gap-2 items-center">
-            <input
-              type="text"
-              value={item.text}
-              onChange={(e) => handleSortingItemChange(iIdx, 'text', e.target.value)}
-              placeholder="Item (e.g. apple)"
-              className="flex-1 bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-bold outline-none"
-            />
-            <span className="text-slate-650 font-bold">→</span>
-            <select
-              value={item.category}
-              onChange={(e) => handleSortingItemChange(iIdx, 'category', e.target.value)}
-              className="flex-1 bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-bold outline-none cursor-pointer"
-            >
-              <option value="">Select Bin</option>
-              {categories.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => handleRemoveSortingItem(iIdx)}
-              className="text-[10px] text-red-400 hover:text-red-300 font-bold px-2 py-1 border border-transparent cursor-pointer"
-            >
-              ✕
-            </button>
-          </div>
-        ))}
-      </div>
+
+      {categories.length === 0 ? (
+        <div className="p-4 bg-slate-950/20 border border-dashed border-slate-800 rounded-xl text-center">
+          <p className="text-[10px] text-slate-500 italic">No categories created yet. Click "+ Add Category Bin".</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {categories.map((cat, idx) => {
+            const catItems = itemsByCategory[cat] || [];
+            const rawItemsText = catItems.join('\n');
+
+            return (
+              <div key={idx} className="bg-slate-950/40 border border-slate-900 rounded-2xl p-4 space-y-3 relative">
+                {/* Category Header */}
+                <div className="flex items-center justify-between gap-3">
+                  <input
+                    type="text"
+                    value={cat}
+                    onChange={(e) => handleCategoryTitleChange(cat, e.target.value)}
+                    placeholder="e.g. Verbs"
+                    className="bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-white font-bold outline-none focus:border-indigo-500 flex-grow"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveCategory(cat)}
+                    className="text-[10px] text-red-400 hover:text-red-300 font-bold px-2 py-1.5 border border-slate-900 rounded-xl bg-slate-950 cursor-pointer"
+                    title="Delete Category"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Items Text Area */}
+                <div className="space-y-1">
+                  <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">
+                    Items List (one per line)
+                  </label>
+                  <AutoExpandingTextarea
+                    value={rawItemsText}
+                    onChange={(e) => handleCategoryItemsChange(cat, e.target.value)}
+                    placeholder="e.g.&#10;run&#10;walk&#10;talk"
+                    rows={4}
+                    className="w-full bg-slate-950 border border-slate-900 rounded-xl p-3 text-xs text-slate-350 font-bold outline-none focus:border-indigo-500 placeholder-slate-650"
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

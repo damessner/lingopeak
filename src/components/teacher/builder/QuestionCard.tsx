@@ -14,6 +14,7 @@ import SentenceUnscrambleEditor from './editors/SentenceUnscrambleEditor';
 import MatchingPairsEditor from './editors/MatchingPairsEditor';
 import CrosswordEditor from './editors/CrosswordEditor';
 import WordSearchEditor from './editors/WordSearchEditor';
+import OrderSentencesEditor from './editors/OrderSentencesEditor';
 
 // Import Student Widgets
 import MultipleChoice from '@/components/worksheets/MultipleChoice';
@@ -26,6 +27,7 @@ import Crossword from '@/components/worksheets/Crossword';
 import SentenceUnscramble from '@/components/worksheets/SentenceUnscramble';
 import MatchingPairs from '@/components/worksheets/MatchingPairs';
 import WordSearch from '@/components/worksheets/WordSearch';
+import OrderSentences from '@/components/worksheets/OrderSentences';
 
 interface QuestionCardProps {
   question: Question;
@@ -116,6 +118,8 @@ export default function QuestionCard({
         return <CrosswordEditor question={question} onChange={onChange as any} />;
       case 'word_search':
         return <WordSearchEditor question={question} onChange={onChange as any} />;
+      case 'order_sentences':
+        return <OrderSentencesEditor question={question as any} onChange={onChange as any} />;
       default:
         return null;
     }
@@ -150,6 +154,8 @@ export default function QuestionCard({
         return <Crossword {...props} />;
       case 'word_search':
         return <WordSearch {...props} />;
+      case 'order_sentences':
+        return <OrderSentences {...props} />;
       default:
         return null;
     }

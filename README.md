@@ -37,22 +37,30 @@ Built with 💻 and 💜 for educators and pupils.
 
 ## ✨ Core Features
 
-### 🧩 1. Interactive Syllabus Engine (10 Widget Types)
+### 🧩 1. Interactive Syllabus Engine (11 Widget Types)
 Worksheets render responsive, tactile game boards designed for iPad touch grids (minimum 44×44px target sizes):
-- **Multiple Choice**: Card-based options.
-- **Fill in the Gap**: Text input or dropdown fields.
-- **Drag and Drop**: Tokens dragged into sentence targets.
+- **Multiple Choice**: Card-based options (supports single or multiple correct choices).
+- **Fill in the Gap**: Inline gap slots (author with `#word#`).
+- **Drag and Drop**: Tokens dragged into sentence targets (author with `#word#`).
 - **Category Sorting**: Cards sorted into distinct bins.
-- **Correct the Mistake**: Tapping mistakes opens correction bubbles.
-- **Choice Matrix**: Table matching grids.
-- **Crosswords**: Touch-friendly crossword navigation.
+- **Correct the Mistake**: Tapping mistakes opens correction bubbles (author with `incorrect#correct`).
+- **Choice Matrix**: Table matching grids (author with `statement##column`).
 - **Sentence Unscramble**: Ordering word arrays.
+- **Sentence Ordering**: Shuffled list of complete sentences to sort using Up/Down buttons.
 - **Matching Pairs**: Card matching grids.
+- **Crosswords**: Touch-friendly crossword navigation.
 - **Word Search**: Touch grids for finding hidden letters.
 
 ### 🏗️ 2. Teacher Worksheet Builder
 A full-featured, modular standalone builder for creating custom worksheets:
-- **10 question type editors** — type-specific editors with validation
+- **Two-Column Split Layout** — Left pane for quick click-to-add widget picker and media uploads/links; right pane for worksheet editing.
+- **11 question type editors** — type-specific editors with validation.
+- **Media Attachments** — Easily embed audio (`.mp3/.wav`), images (`.jpeg/.png`), and YouTube videos on any worksheet.
+- **Simplified Text-Based Formats**:
+  - *Fill in the Gap & Drag & Drop*: Inline `#word#` syntax instead of brackets.
+  - *Category Sorting*: Define category titles and paste words/sentences line-by-line in textareas.
+  - *Correct the Mistake*: Parse inline incorrect/correct words using `incorrect#correct` (e.g. `He do#does his homework.`).
+  - *Choice Matrix*: Author rows line-by-line using `statement##column` with a real-time table preview.
 - **AI Co-Pilot** — generate worksheets from a natural language prompt, or ✨ Smart Fill individual question cards
 - **Auto-save drafts** — localStorage autosave every 30s with recover/discard on reload
 - **Undo/Redo** — full history stack (Ctrl+Z / Ctrl+Y)
@@ -62,7 +70,6 @@ A full-featured, modular standalone builder for creating custom worksheets:
 - **Export/Import JSON** — share worksheets between instances
 - **Unsaved changes guard** — `beforeunload` + Next.js router interception
 - **Error boundaries** — per-card crash isolation with reset/delete options
-- **Unit tests** — 11 test cases across all 10 question types
 - **Keyboard shortcuts** — Ctrl+S/Ctrl+Enter (save), Ctrl+Alt+N (new question)
 
 ### 🤖 3. Coach — Socratic AI Learning Coach 2.0

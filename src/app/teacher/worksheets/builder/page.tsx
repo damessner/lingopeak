@@ -32,7 +32,7 @@ export default async function BuilderPage({ searchParams }: PageProps) {
 
   let worksheet = null;
   if (id) {
-    const wsRecord = db.prepare('SELECT id, title, category_id, tier, questions_json, badge_emoji FROM worksheets WHERE id = ?').get(id) as any;
+    const wsRecord = db.prepare('SELECT id, title, category_id, tier, questions_json, badge_emoji, audio_url, image_url, video_url FROM worksheets WHERE id = ?').get(id) as any;
     if (wsRecord) {
       worksheet = {
         id: wsRecord.id,
@@ -40,7 +40,10 @@ export default async function BuilderPage({ searchParams }: PageProps) {
         category_id: wsRecord.category_id,
         tier: wsRecord.tier,
         questions_json: wsRecord.questions_json,
-        badge_emoji: wsRecord.badge_emoji
+        badge_emoji: wsRecord.badge_emoji,
+        audio_url: wsRecord.audio_url,
+        image_url: wsRecord.image_url,
+        video_url: wsRecord.video_url
       };
     }
   } else if (categoryId) {
@@ -49,7 +52,10 @@ export default async function BuilderPage({ searchParams }: PageProps) {
       category_id: categoryId,
       tier: 'EXPLORER' as const,
       questions_json: '[]',
-      badge_emoji: '🥇'
+      badge_emoji: '🥇',
+      audio_url: '',
+      image_url: '',
+      video_url: ''
     };
   }
 

@@ -15,6 +15,7 @@ import SentenceUnscramble from './SentenceUnscramble';
 import MatchingPairs from './MatchingPairs';
 import WordSearch from './WordSearch';
 import DialogueRenderer from './DialogueRenderer';
+import OrderSentences from './OrderSentences';
 
 interface WorksheetContainerProps {
   worksheet: {
@@ -123,13 +124,20 @@ export default function WorksheetContainer({ worksheet, studentId = '', previewM
 
       switch (q.type) {
         case 'multiple_choice':
-          if (studentAns === q.answer) correctCount++;
+          if (q.isMulti) {
+            const correctSet = q.answers || (q.answer ? [q.answer] : []);
+            const studentSet = Array.isArray(studentAns) ? studentAns : (studentAns ? [studentAns] : []);
+            const matchesAll = correctSet.length === studentSet.length &&
+              correctSet.every((ans: string) => studentSet.includes(ans));
+            if (matchesAll) correctCount++;
+          } else {
+            if (studentAns === q.answer) correctCount++;
+          }
           break;
         
-        case 'fill_in_gap':
-          // q.text has bracket elements. Find number of brackets to check
-          // e.g. "She [drives]" -> gap_0
-          const gapMatches = q.text.match(/\[([^\]]+)\]/g) || [];
+        case 'fill_in_gap': {
+          const normalizedText = q.text.replace(/#([^#]+)#/g, '[$1]');
+          const gapMatches = normalizedText.match(/\[([^\]]+)\]/g) || [];
           let gapsCorrect = true;
           gapMatches.forEach((match: string, idx: number) => {
             const correctAns = match.slice(1, -1).trim();
@@ -140,12 +148,13 @@ export default function WorksheetContainer({ worksheet, studentId = '', previewM
           });
           if (gapsCorrect) correctCount++;
           break;
+        }
 
-        case 'drag_and_drop':
+        case 'drag_and_drop': {
           let dragCorrect = true;
-          let slotIdx = 0;
           q.sentences.forEach((sentence: string, sIdx: number) => {
-            const matches = sentence.match(/\[([^\]]+)\]/g) || [];
+            const normalizedSentence = sentence.replace(/#([^#]+)#/g, '[$1]');
+            const matches = normalizedSentence.match(/\[([^\]]+)\]/g) || [];
             matches.forEach((match: string, mIdx: number) => {
               const correctAns = match.slice(1, -1).trim();
               const studentVal = (studentAns[`slot_${sIdx}_${mIdx}`] || '').trim();
@@ -156,6 +165,7 @@ export default function WorksheetContainer({ worksheet, studentId = '', previewM
           });
           if (dragCorrect) correctCount++;
           break;
+        }
 
         case 'category_sorting':
           let sortCorrect = true;
@@ -220,6 +230,12 @@ export default function WorksheetContainer({ worksheet, studentId = '', previewM
         case 'word_search':
           const totalWords = q.words.length;
           if (Array.isArray(studentAns) && studentAns.length === totalWords) {
+            correctCount++;
+          }
+          break;
+
+        case 'order_sentences':
+          if (Array.isArray(studentAns) && JSON.stringify(studentAns) === JSON.stringify(q.sentences)) {
             correctCount++;
           }
           break;
@@ -309,6 +325,8 @@ export default function WorksheetContainer({ worksheet, studentId = '', previewM
         return <MatchingPairs {...props} />;
       case 'word_search':
         return <WordSearch {...props} />;
+      case 'order_sentences':
+        return <OrderSentences {...props} />;
       default:
         return <p className="text-slate-400 text-sm">Unsupported question type: {activeQuestion.type}</p>;
     }

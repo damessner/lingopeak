@@ -8,7 +8,8 @@ export type QuestionType =
   | 'correct_the_mistake'
   | 'choice_matrix'
   | 'crossword'
-  | 'word_search';
+  | 'word_search'
+  | 'order_sentences';
 
 export interface BaseQuestion {
   id: string;
@@ -19,7 +20,9 @@ export interface BaseQuestion {
 export interface MultipleChoiceQuestion extends BaseQuestion {
   type: 'multiple_choice';
   options: string[];
-  answer: string;
+  answer: string;      // Backwards compatibility (first/single correct answer)
+  answers?: string[];  // List of correct answers if multiple choice allows more than one
+  isMulti?: boolean;   // Toggle for checking multiple choice mode
 }
 
 export interface FillInGapQuestion extends BaseQuestion {
@@ -57,6 +60,7 @@ export interface CorrectTheMistakeQuestion extends BaseQuestion {
   text: string;
   mistake: string;
   correction: string;
+  raw_text?: string;
 }
 
 export interface ChoiceMatrixQuestion extends BaseQuestion {
@@ -66,6 +70,7 @@ export interface ChoiceMatrixQuestion extends BaseQuestion {
   columns: string[];
   columns_raw?: string;
   answers: Record<string, string>;
+  matrix_raw_text?: string;
 }
 
 export interface CrosswordQuestion extends BaseQuestion {
@@ -82,6 +87,11 @@ export interface WordSearchQuestion extends BaseQuestion {
   grid: string[][];
 }
 
+export interface OrderSentencesQuestion extends BaseQuestion {
+  type: 'order_sentences';
+  sentences: string[];
+}
+
 export type Question =
   | MultipleChoiceQuestion
   | FillInGapQuestion
@@ -92,7 +102,8 @@ export type Question =
   | CorrectTheMistakeQuestion
   | ChoiceMatrixQuestion
   | CrosswordQuestion
-  | WordSearchQuestion;
+  | WordSearchQuestion
+  | OrderSentencesQuestion;
 
 export interface Category {
   id: string;
@@ -108,4 +119,7 @@ export interface Worksheet {
   tier: 'EXPLORER' | 'VOYAGER' | 'CHALLENGER' | 'SUMMIT';
   questions_json: string;
   badge_emoji?: string;
+  audio_url?: string | null;
+  image_url?: string | null;
+  video_url?: string | null;
 }

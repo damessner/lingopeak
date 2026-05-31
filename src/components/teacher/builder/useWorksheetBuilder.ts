@@ -18,6 +18,11 @@ export function useWorksheetBuilder({ categories, worksheet }: UseWorksheetBuild
   const [tier, setTier] = useState<'EXPLORER' | 'VOYAGER' | 'CHALLENGER' | 'SUMMIT'>(worksheet?.tier || 'EXPLORER');
   const [badgeEmoji, setBadgeEmoji] = useState(worksheet?.badge_emoji || '🥇');
 
+  // Media attachment states
+  const [audioUrl, setAudioUrl] = useState(worksheet?.audio_url || '');
+  const [imageUrl, setImageUrl] = useState(worksheet?.image_url || '');
+  const [videoUrl, setVideoUrl] = useState(worksheet?.video_url || '');
+
   // Parse initial questions helper
   const parseQuestions = useCallback((questionsJson?: string): Question[] => {
     if (!questionsJson) return [];
@@ -30,7 +35,8 @@ export function useWorksheetBuilder({ categories, worksheet }: UseWorksheetBuild
         if (q.type === 'drag_and_drop') {
           const correctWords: string[] = [];
           (q.sentences || []).forEach((s: string) => {
-            const matches = s.match(/\[([^\]]+)\]/g) || [];
+            const normalized = s.replace(/#([^#]+)#/g, '[$1]');
+            const matches = normalized.match(/\[([^\]]+)\]/g) || [];
             matches.forEach(m => correctWords.push(m.slice(1, -1).trim()));
           });
           const allWords = q.words || [];
@@ -121,7 +127,10 @@ export function useWorksheetBuilder({ categories, worksheet }: UseWorksheetBuild
                               (worksheet?.title || '') !== parsed.title ||
                               (worksheet?.category_id || '') !== parsed.categoryId ||
                               (worksheet?.tier || 'EXPLORER') !== parsed.tier ||
-                              (worksheet?.badge_emoji || '🥇') !== parsed.badgeEmoji;
+                              (worksheet?.badge_emoji || '🥇') !== parsed.badgeEmoji ||
+                              (worksheet?.audio_url || '') !== (parsed.audioUrl || '') ||
+                              (worksheet?.image_url || '') !== (parsed.imageUrl || '') ||
+                              (worksheet?.video_url || '') !== (parsed.videoUrl || '');
 
           if (isDifferent) {
             setHasDraft(true);
@@ -138,7 +147,7 @@ export function useWorksheetBuilder({ categories, worksheet }: UseWorksheetBuild
   // Autosave timer
   const lastSavedState = useRef<string>('');
   useEffect(() => {
-    const currentState = JSON.stringify({ title, categoryId, tier, badgeEmoji, questions });
+    const currentState = JSON.stringify({ title, categoryId, tier, badgeEmoji, audioUrl, imageUrl, videoUrl, questions });
     lastSavedState.current = currentState;
 
     const interval = setInterval(() => {
@@ -147,6 +156,9 @@ export function useWorksheetBuilder({ categories, worksheet }: UseWorksheetBuild
                         categoryId === (worksheet?.category_id || categories[0]?.id || '') &&
                         tier === (worksheet?.tier || 'EXPLORER') &&
                         badgeEmoji === (worksheet?.badge_emoji || '🥇') &&
+                        audioUrl === (worksheet?.audio_url || '') &&
+                        imageUrl === (worksheet?.image_url || '') &&
+                        videoUrl === (worksheet?.video_url || '') &&
                         questions.length === initialQuestions.length &&
                         JSON.stringify(questions) === JSON.stringify(initialQuestions);
 
@@ -157,6 +169,9 @@ export function useWorksheetBuilder({ categories, worksheet }: UseWorksheetBuild
         categoryId,
         tier,
         badgeEmoji,
+        audioUrl,
+        imageUrl,
+        videoUrl,
         questions,
         timestamp: Date.now()
       };
@@ -164,7 +179,7 @@ export function useWorksheetBuilder({ categories, worksheet }: UseWorksheetBuild
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [title, categoryId, tier, badgeEmoji, questions, localStorageKey, worksheet, categories, initialQuestions]);
+  }, [title, categoryId, tier, badgeEmoji, audioUrl, imageUrl, videoUrl, questions, localStorageKey, worksheet, categories, initialQuestions]);
 
   const recoverDraft = useCallback(() => {
     if (!draftData) return;
@@ -172,6 +187,9 @@ export function useWorksheetBuilder({ categories, worksheet }: UseWorksheetBuild
     setCategoryId(draftData.categoryId || '');
     setTier(draftData.tier || 'EXPLORER');
     setBadgeEmoji(draftData.badgeEmoji || '🥇');
+    setAudioUrl(draftData.audioUrl || '');
+    setImageUrl(draftData.imageUrl || '');
+    setVideoUrl(draftData.videoUrl || '');
     
     // Reset history stack with recovered questions
     setHistory([draftData.questions]);
@@ -192,6 +210,9 @@ export function useWorksheetBuilder({ categories, worksheet }: UseWorksheetBuild
     categoryId === (worksheet?.category_id || categories[0]?.id || '') &&
     tier === (worksheet?.tier || 'EXPLORER') &&
     badgeEmoji === (worksheet?.badge_emoji || '🥇') &&
+    audioUrl === (worksheet?.audio_url || '') &&
+    imageUrl === (worksheet?.image_url || '') &&
+    videoUrl === (worksheet?.video_url || '') &&
     questions.length === initialQuestions.length &&
     JSON.stringify(questions) === JSON.stringify(initialQuestions)
   );
@@ -205,6 +226,12 @@ export function useWorksheetBuilder({ categories, worksheet }: UseWorksheetBuild
     setTier,
     badgeEmoji,
     setBadgeEmoji,
+    audioUrl,
+    setAudioUrl,
+    imageUrl,
+    setImageUrl,
+    videoUrl,
+    setVideoUrl,
     questions,
     setQuestions,
     undo,

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Question, Category, QuestionType, Worksheet } from '@/lib/worksheet-types';
 
 import QuestionCard from './builder/QuestionCard';
-import QuestionTypePicker from './builder/QuestionTypePicker';
+import { QUESTION_TYPES_META } from './builder/QuestionTypePicker';
 import TemplatePicker from './builder/TemplatePicker';
 import TestDriveModal from './builder/TestDriveModal';
 
@@ -29,7 +29,7 @@ export default function WorksheetBuilder({
   onCancel,
   onDirtyChange
 }: WorksheetBuilderProps) {
-  // Leverage extracted custom state & actions hook
+  // Leverage custom state & actions hook, now tracking media URLs as well
   const {
     title,
     setTitle,
@@ -39,6 +39,12 @@ export default function WorksheetBuilder({
     setTier,
     badgeEmoji,
     setBadgeEmoji,
+    audioUrl,
+    setAudioUrl,
+    imageUrl,
+    setImageUrl,
+    videoUrl,
+    setVideoUrl,
     questions,
     setQuestions,
     undo,
@@ -56,8 +62,7 @@ export default function WorksheetBuilder({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Modal & palette visibility states
-  const [showTypePalette, setShowTypePalette] = useState(false);
+  // Modal & panel states
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [showTestDrive, setShowTestDrive] = useState(false);
   const [collapsedQuestions, setCollapsedQuestions] = useState<Record<string, boolean>>({});
@@ -89,7 +94,9 @@ export default function WorksheetBuilder({
       question: '',
       ...(type === 'multiple_choice' && {
         options: ['', '', '', ''],
-        answer: ''
+        answer: '',
+        answers: [],
+        isMulti: false
       }),
       ...(type === 'fill_in_gap' && {
         text: ''
@@ -107,20 +114,19 @@ export default function WorksheetBuilder({
       }),
       ...(type === 'category_sorting' && {
         categories: ['', ''],
-        categories_raw: '',
-        items: [{ text: '', category: '' }]
+        items: []
       }),
       ...(type === 'correct_the_mistake' && {
         text: '',
         mistake: '',
-        correction: ''
+        correction: '',
+        raw_text: ''
       }),
       ...(type === 'choice_matrix' && {
-        rows: [''],
-        rows_raw: '',
-        columns: [''],
-        columns_raw: '',
-        answers: {}
+        rows: [],
+        columns: [],
+        answers: {},
+        matrix_raw_text: ''
       }),
       ...(type === 'crossword' && {
         crossword_items: [{ word: '', clue: '' }],
@@ -131,9 +137,28 @@ export default function WorksheetBuilder({
         word_search_words: '',
         words: [],
         grid: []
+      }),
+      ...(type === 'order_sentences' && {
+        sentences: []
       })
     } as any;
     setQuestions([...questions, newQuestion]);
+
+    // Collapse other questions and expand the new one
+    const newCollapsedState: Record<string, boolean> = {};
+    questions.forEach(q => {
+      newCollapsedState[q.id] = true;
+    });
+    newCollapsedState[newQuestion.id] = false;
+    setCollapsedQuestions(newCollapsedState);
+
+    // Smooth scroll to the bottom of the form
+    setTimeout(() => {
+      window.scrollTo({
+        top: document.body.scrollHeight,
+        behavior: 'smooth'
+      });
+    }, 100);
   };
 
   const handleRemoveQuestion = (index: number) => {
@@ -165,7 +190,9 @@ export default function WorksheetBuilder({
       question: '',
       ...(type === 'multiple_choice' && {
         options: ['', '', '', ''],
-        answer: ''
+        answer: '',
+        answers: [],
+        isMulti: false
       }),
       ...(type === 'fill_in_gap' && {
         text: ''
@@ -183,20 +210,19 @@ export default function WorksheetBuilder({
       }),
       ...(type === 'category_sorting' && {
         categories: ['', ''],
-        categories_raw: '',
-        items: [{ text: '', category: '' }]
+        items: []
       }),
       ...(type === 'correct_the_mistake' && {
         text: '',
         mistake: '',
-        correction: ''
+        correction: '',
+        raw_text: ''
       }),
       ...(type === 'choice_matrix' && {
-        rows: [''],
-        rows_raw: '',
-        columns: [''],
-        columns_raw: '',
-        answers: {}
+        rows: [],
+        columns: [],
+        answers: {},
+        matrix_raw_text: ''
       }),
       ...(type === 'crossword' && {
         crossword_items: [{ word: '', clue: '' }],
@@ -207,6 +233,9 @@ export default function WorksheetBuilder({
         word_search_words: '',
         words: [],
         grid: []
+      }),
+      ...(type === 'order_sentences' && {
+        sentences: []
       })
     } as any;
     const updated = [...questions];
@@ -240,6 +269,9 @@ export default function WorksheetBuilder({
       categoryId,
       tier,
       badgeEmoji,
+      audioUrl,
+      imageUrl,
+      videoUrl,
       questions
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -272,6 +304,9 @@ export default function WorksheetBuilder({
           setCategoryId(parsed.categoryId || categories[0]?.id || '');
           setTier(parsed.tier || 'EXPLORER');
           setBadgeEmoji(parsed.badgeEmoji || '🥇');
+          setAudioUrl(parsed.audioUrl || '');
+          setImageUrl(parsed.imageUrl || '');
+          setVideoUrl(parsed.videoUrl || '');
           setQuestions(parsed.questions);
           setError(null);
           displayMessage('Worksheet JSON imported successfully!', 'success');
@@ -296,7 +331,7 @@ export default function WorksheetBuilder({
     onCancel();
   };
 
-  // Keyboard Shortcuts hook integrating undo/redo callbacks
+  // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ctrl + Z: Undo
@@ -316,12 +351,6 @@ export default function WorksheetBuilder({
         e.preventDefault();
         const btn = document.getElementById('worksheet-save-btn');
         if (btn) btn.click();
-      }
-      
-      // Ctrl + Alt + N or Ctrl + I to toggle palette
-      if ((e.ctrlKey && e.altKey && e.key === 'n') || (e.ctrlKey && e.key === 'i')) {
-        e.preventDefault();
-        setShowTypePalette(prev => !prev);
       }
     };
 
@@ -359,7 +388,8 @@ export default function WorksheetBuilder({
       if (q.type === 'drag_and_drop') {
         const correctWords: string[] = [];
         (q.sentences || []).forEach((s: string) => {
-          const matches = s.match(/\[([^\]]+)\]/g) || [];
+          const normalized = s.replace(/#([^#]+)#/g, '[$1]');
+          const matches = normalized.match(/\[([^\]]+)\]/g) || [];
           matches.forEach(m => correctWords.push(m.slice(1, -1).trim()));
         });
         const dists = q.distractors || [];
@@ -378,7 +408,10 @@ export default function WorksheetBuilder({
           categoryId,
           tier,
           questions: processedQuestions,
-          badgeEmoji
+          badgeEmoji,
+          audioUrl: audioUrl.trim() || null,
+          imageUrl: imageUrl.trim() || null,
+          videoUrl: videoUrl.trim() || null
         })
       });
 
@@ -399,11 +432,10 @@ export default function WorksheetBuilder({
   };
 
   return (
-    <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl space-y-6 max-w-4xl mx-auto animate-scaleUp">
-      
+    <div className="space-y-6 max-w-6xl mx-auto animate-scaleUp">
       {/* Draft Recovery Banner */}
       {hasDraft && (
-        <div className="bg-indigo-950/80 border border-indigo-500/30 p-4 rounded-2xl flex items-center justify-between text-xs font-bold text-indigo-300 animate-scaleUp">
+        <div className="bg-indigo-950/80 border border-indigo-500/30 p-4 rounded-2xl flex items-center justify-between text-xs font-bold text-indigo-300">
           <div className="flex items-center gap-2">
             <span>💾</span>
             <span>We found an unsaved local draft of this worksheet from {draftTime || 'recently'}.</span>
@@ -412,7 +444,7 @@ export default function WorksheetBuilder({
             <button
               type="button"
               onClick={recoverDraft}
-              className="bg-indigo-600 hover:bg-indigo-550 text-white px-3.5 py-1.5 rounded-xl cursor-pointer font-extrabold text-[10px] transition-colors"
+              className="bg-indigo-650 hover:bg-indigo-550 text-white px-3.5 py-1.5 rounded-xl cursor-pointer font-extrabold text-[10px] transition-colors"
             >
               Recover Draft
             </button>
@@ -427,251 +459,330 @@ export default function WorksheetBuilder({
         </div>
       )}
 
-      {/* Header */}
-      <div className="border-b border-slate-800/80 pb-4 flex justify-between items-center flex-wrap gap-4">
-        <div>
-          <span className="text-[10px] bg-indigo-500/20 text-indigo-300 font-black px-2.5 py-1 rounded-lg border border-indigo-500/10 uppercase tracking-widest">
-            {worksheet?.id ? 'Edit Custom Widget' : 'New Custom Widget'}
-          </span>
-          <h2 className="text-xl font-extrabold text-white tracking-tight mt-2 uppercase">
-            {worksheet?.id ? 'Worksheet Editor' : 'Worksheet Creator'}
-          </h2>
-        </div>
+      {/* Main Form Elements layout split double pane */}
+      <form onSubmit={handleSaveSubmit} className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
         
-        <div className="flex gap-2 items-center flex-wrap">
-          {/* Undo/Redo Buttons */}
-          <div className="flex bg-slate-950 border border-slate-855 rounded-xl overflow-hidden mr-2">
-            <button
-              type="button"
-              onClick={undo}
-              disabled={!canUndo}
-              className="text-xs hover:bg-slate-900 disabled:opacity-25 text-slate-350 font-bold px-3 py-2 cursor-pointer transition-colors border-r border-slate-855 select-none"
-              title="Undo change (Ctrl+Z)"
-            >
-              ↩ Undo
-            </button>
-            <button
-              type="button"
-              onClick={redo}
-              disabled={!canRedo}
-              className="text-xs hover:bg-slate-900 disabled:opacity-25 text-slate-355 font-bold px-3 py-2 cursor-pointer transition-colors select-none"
-              title="Redo change (Ctrl+Y)"
-            >
-              ↪ Redo
-            </button>
-          </div>
-
-          {/* Export/Import Buttons */}
-          <div className="flex bg-slate-950 border border-slate-855 rounded-xl overflow-hidden mr-2">
-            <button
-              type="button"
-              onClick={handleExportJSON}
-              className="text-xs hover:bg-slate-900 text-indigo-400 hover:text-indigo-300 font-bold px-3.5 py-2 cursor-pointer transition-colors border-r border-slate-855 select-none"
-              title="Export worksheet as JSON file"
-            >
-              📥 Export
-            </button>
-            <label
-              className="text-xs hover:bg-slate-900 text-indigo-400 hover:text-indigo-300 font-bold px-3.5 py-2 cursor-pointer transition-colors select-none flex items-center"
-              title="Import worksheet from JSON file"
-            >
-              📤 Import
-              <input
-                type="file"
-                accept=".json"
-                onChange={handleImportJSON}
-                className="hidden"
-              />
-            </label>
-          </div>
+        {/* Left Side Pane: Sticky Widget Picker & Media Attachments */}
+        <div className="lg:col-span-1 space-y-6 lg:sticky lg:top-24">
           
-          <button
-            type="button"
-            onClick={() => setShowTemplatePicker(true)}
-            className="text-xs bg-slate-900 hover:bg-slate-855 text-indigo-400 hover:text-indigo-300 font-bold border border-slate-800 px-4 py-2 rounded-xl cursor-pointer transition-colors"
-          >
-            📋 Use Template
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowTestDrive(true)}
-            disabled={questions.length === 0}
-            className="text-xs bg-emerald-600/10 hover:bg-emerald-600/25 disabled:bg-slate-900 text-emerald-400 disabled:text-slate-650 font-bold border border-emerald-500/20 px-4 py-2 rounded-xl cursor-pointer disabled:cursor-not-allowed transition-colors"
-          >
-            🎮 Test Drive
-          </button>
-        </div>
-      </div>
-
-      {error && (
-        <div className="p-4 bg-red-950/80 border border-red-500/40 text-red-200 rounded-2xl text-xs font-bold flex items-center gap-2">
-          <span>⚠️</span>
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* Extracted AI Co-Pilot Panel */}
-      <AICoPilotPanel
-        isOpen={aiPanelOpen}
-        onToggle={() => setAiPanelOpen(!aiPanelOpen)}
-        tier={tier}
-        onGenerateQuestions={(newQuestions) => {
-          setQuestions(newQuestions);
-          displayMessage('AI Questions generated successfully!', 'success');
-        }}
-      />
-
-      {/* Editor Form */}
-      <form onSubmit={handleSaveSubmit} className="space-y-6">
-        
-        {/* Core details row */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="space-y-2 md:col-span-1">
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Worksheet Title</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Present Perfect Practice"
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-300 font-bold outline-none focus:border-indigo-500 transition-colors"
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Syllabus Category</label>
-            <select
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-300 font-bold outline-none focus:border-indigo-500 transition-colors cursor-pointer"
-            >
-              {categories.map(cat => (
-                <option key={cat.id} value={cat.id}>
-                  [{cat.unit_title.slice(0, 15)}...] {cat.name}
-                </option>
+          {/* Widget Selection Block */}
+          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 shadow-md space-y-3">
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-800/65 pb-2">
+              Select Widget Type
+            </h3>
+            <div className="grid grid-cols-1 gap-1.5 max-h-[380px] lg:max-h-[500px] overflow-y-auto pr-1">
+              {QUESTION_TYPES_META.map(meta => (
+                <button
+                  key={meta.id}
+                  type="button"
+                  onClick={() => handleAddQuestion(meta.id)}
+                  className="flex items-center gap-3 text-left w-full p-2.5 bg-slate-950/40 hover:bg-indigo-650/15 border border-slate-900 hover:border-indigo-500/25 rounded-xl transition-all cursor-pointer group"
+                >
+                  <span className="text-xl bg-slate-900 border border-slate-800 group-hover:bg-slate-950 p-1.5 rounded-lg select-none">
+                    {meta.icon}
+                  </span>
+                  <div>
+                    <div className="text-xs font-bold text-slate-200 group-hover:text-white uppercase tracking-tight">
+                      {meta.name.split(' (')[0]}
+                    </div>
+                    <div className="text-[9px] text-slate-500 mt-0.5 leading-tight">
+                      {meta.desc}
+                    </div>
+                  </div>
+                </button>
               ))}
-            </select>
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Difficulty Tier</label>
-            <select
-              value={tier}
-              onChange={(e) => setTier(e.target.value as any)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-300 font-bold outline-none focus:border-indigo-500 transition-colors cursor-pointer"
-            >
-              <option value="EXPLORER">EXPLORER (Easy)</option>
-              <option value="VOYAGER">VOYAGER (Medium)</option>
-              <option value="CHALLENGER">CHALLENGER (Hard)</option>
-              <option value="SUMMIT">SUMMIT (Test)</option>
-            </select>
-          </div>
+          {/* Media Attachments Block */}
+          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 shadow-md space-y-4">
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-800/65 pb-2">
+              Media Attachments
+            </h3>
+            
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest">
+                  Audio URL (.mp3 / .wav)
+                </label>
+                <input
+                  type="text"
+                  value={audioUrl}
+                  onChange={(e) => setAudioUrl(e.target.value)}
+                  placeholder="https://example.com/audio.mp3"
+                  className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-350 outline-none focus:border-indigo-500 font-bold"
+                />
+              </div>
 
-          {/* Curated reward badge popover grid picker */}
-          <div className="space-y-2">
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Reward Badge</label>
-            <BadgeEmojiPicker value={badgeEmoji} onChange={setBadgeEmoji} />
+              <div className="space-y-1">
+                <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest">
+                  Image URL (.jpeg / .png)
+                </label>
+                <input
+                  type="text"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="https://example.com/image.jpg"
+                  className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-350 outline-none focus:border-indigo-500 font-bold"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest">
+                  YouTube / Video URL
+                </label>
+                <input
+                  type="text"
+                  value={videoUrl}
+                  onChange={(e) => setVideoUrl(e.target.value)}
+                  placeholder="https://youtube.com/watch?v=..."
+                  className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-350 outline-none focus:border-indigo-500 font-bold"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Questions Box */}
-        <div className="space-y-6 pt-4 border-t border-slate-800/80">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-extrabold text-white uppercase tracking-wider">Questions List ({questions.length})</h3>
-            
-            {/* Quick add dropdown */}
-            <div className="relative">
+        {/* Right Side Pane: Core Settings & Questions List */}
+        <div className="lg:col-span-3 space-y-6">
+          
+          {/* Header Row Actions */}
+          <div className="bg-slate-900/40 border border-slate-800/80 rounded-3xl p-4 md:p-6 shadow-xl flex flex-wrap justify-between items-center gap-4">
+            <div>
+              <span className="text-[10px] bg-indigo-500/20 text-indigo-300 font-black px-2.5 py-1 rounded-lg border border-indigo-500/10 uppercase tracking-widest">
+                {worksheet?.id ? 'Edit Worksheet' : 'Create Worksheet'}
+              </span>
+              <h2 className="text-lg font-black text-white uppercase tracking-tight mt-1.5">
+                {title.trim() || 'Untitled Worksheet'}
+              </h2>
+            </div>
+
+            <div className="flex gap-2 items-center flex-wrap">
+              {/* Undo/Redo */}
+              <div className="flex bg-slate-950 border border-slate-850 rounded-xl overflow-hidden mr-1">
+                <button
+                  type="button"
+                  onClick={undo}
+                  disabled={!canUndo}
+                  className="text-xs hover:bg-slate-900 disabled:opacity-20 text-slate-400 font-bold px-3 py-2 cursor-pointer border-r border-slate-850 transition-colors select-none"
+                  title="Undo change (Ctrl+Z)"
+                >
+                  ↩ Undo
+                </button>
+                <button
+                  type="button"
+                  onClick={redo}
+                  disabled={!canRedo}
+                  className="text-xs hover:bg-slate-900 disabled:opacity-20 text-slate-400 font-bold px-3 py-2 cursor-pointer transition-colors select-none"
+                  title="Redo change (Ctrl+Y)"
+                >
+                  ↪ Redo
+                </button>
+              </div>
+
+              {/* JSON import/export */}
+              <div className="flex bg-slate-950 border border-slate-850 rounded-xl overflow-hidden mr-1">
+                <button
+                  type="button"
+                  onClick={handleExportJSON}
+                  className="text-xs hover:bg-slate-900 text-indigo-400 hover:text-indigo-300 font-bold px-3 py-2 cursor-pointer transition-colors border-r border-slate-850 select-none"
+                  title="Export to JSON"
+                >
+                  📥 Export
+                </button>
+                <label
+                  className="text-xs hover:bg-slate-900 text-indigo-400 hover:text-indigo-300 font-bold px-3 py-2 cursor-pointer transition-colors select-none flex items-center"
+                  title="Import from JSON"
+                >
+                  📤 Import
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleImportJSON}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
               <button
                 type="button"
-                onClick={() => setShowTypePalette(!showTypePalette)}
-                className="bg-indigo-650/20 hover:bg-indigo-650/40 text-indigo-300 hover:text-white border border-indigo-500/20 text-xs font-bold py-2 px-5 rounded-xl cursor-pointer transition-all shadow-md flex items-center gap-2 select-none"
+                onClick={() => setShowTemplatePicker(true)}
+                className="text-xs bg-slate-900 hover:bg-slate-850 text-indigo-455 hover:text-indigo-400 font-bold border border-slate-800 px-3.5 py-2 rounded-xl cursor-pointer transition-colors"
               >
-                <span>➕ Add Interactive Widget</span>
-                <span className="text-[10px] opacity-75">{showTypePalette ? '▲' : '▼'}</span>
+                📋 Template
               </button>
-              
-              <QuestionTypePicker
-                isOpen={showTypePalette}
-                onClose={() => setShowTypePalette(false)}
-                onSelect={handleAddQuestion}
-              />
+              <button
+                type="button"
+                onClick={() => setShowTestDrive(true)}
+                disabled={questions.length === 0}
+                className="text-xs bg-emerald-600/10 hover:bg-emerald-600/25 disabled:bg-slate-900 text-emerald-400 disabled:text-slate-600 font-bold border border-emerald-500/20 px-3.5 py-2 rounded-xl cursor-pointer disabled:cursor-not-allowed transition-colors"
+              >
+                🎮 Test Drive
+              </button>
             </div>
           </div>
 
-          {questions.length === 0 ? (
-            <div className="p-10 bg-slate-950/20 border border-dashed border-slate-800 rounded-2xl text-center">
-              <span className="text-3xl block filter grayscale opacity-40 select-none mb-2">📋</span>
-              <p className="text-slate-500 text-xs italic">No questions added yet. Use the button above to build your worksheet.</p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {questions.map((q, idx) => {
-                const isCollapsed = !!collapsedQuestions[q.id];
-                
-                return (
-                  <ErrorBoundary
-                    key={q.id}
-                    onReset={() => handleResetQuestion(idx)}
-                    onDelete={() => handleRemoveQuestion(idx)}
-                  >
-                    <QuestionCard
-                      question={q}
-                      index={idx}
-                      totalQuestions={questions.length}
-                      isCollapsed={isCollapsed}
-                      onToggleCollapse={() => toggleCollapse(q.id)}
-                      onMoveUp={() => handleMoveQuestion(idx, 'up')}
-                      onMoveDown={() => handleMoveQuestion(idx, 'down')}
-                      onRemove={() => handleRemoveQuestion(idx)}
-                      onDuplicate={() => handleDuplicateQuestion(idx)}
-                      onChange={(fields) => handleQuestionChange(idx, fields)}
-                      onDragStart={(e) => {
-                        setDraggedIndex(idx);
-                        e.dataTransfer.effectAllowed = 'move';
-                      }}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        if (draggedIndex === null || draggedIndex === idx) return;
-                        const updated = [...questions];
-                        const [draggedItem] = updated.splice(draggedIndex, 1);
-                        updated.splice(idx, 0, draggedItem);
-                        setQuestions(updated);
-                        setDraggedIndex(null);
-                      }}
-                      onDragEnd={() => setDraggedIndex(null)}
-                      isDragged={draggedIndex === idx}
-                    />
-                  </ErrorBoundary>
-                );
-              })}
+          {error && (
+            <div className="p-4 bg-red-950/80 border border-red-500/40 text-red-200 rounded-2xl text-xs font-bold flex items-center gap-2">
+              <span>⚠️</span>
+              <span>{error}</span>
             </div>
           )}
-        </div>
 
-        {/* Footer save/cancel row */}
-        <div className="flex justify-end gap-3 pt-6 border-t border-slate-800/80 font-bold">
-          <button
-            type="button"
-            onClick={handleCancelClick}
-            className="bg-slate-900 hover:bg-slate-855 text-slate-400 hover:text-slate-300 border border-slate-800 text-xs py-2.5 px-6 rounded-xl cursor-pointer transition-all"
-            style={{ minHeight: '40px' }}
-          >
-            Cancel
-          </button>
-          <button
-            id="worksheet-save-btn"
-            type="submit"
-            disabled={saving}
-            className="bg-indigo-650 hover:bg-indigo-600 text-white font-bold text-xs py-2.5 px-6 rounded-xl border border-indigo-500/20 cursor-pointer transition-all disabled:opacity-50"
-            style={{ minHeight: '40px' }}
-          >
-            {saving ? 'Saving...' : 'Save & Publish Worksheet'}
-          </button>
-        </div>
+          {/* Core settings form block */}
+          <div className="bg-slate-900/40 border border-slate-800/80 rounded-3xl p-5 md:p-6 shadow-xl grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="space-y-2 md:col-span-1">
+              <label className="block text-[9px] font-black text-slate-450 uppercase tracking-widest">Worksheet Title</label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. Present Perfect Practice"
+                className="w-full bg-slate-950 border border-slate-900 rounded-xl px-4 py-2.5 text-xs text-slate-300 font-bold outline-none focus:border-indigo-500 transition-colors"
+                required
+              />
+            </div>
 
+            <div className="space-y-2">
+              <label className="block text-[9px] font-black text-slate-450 uppercase tracking-widest">Syllabus Category</label>
+              <select
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-900 rounded-xl px-4 py-2.5 text-xs text-slate-300 font-bold outline-none focus:border-indigo-500 transition-colors cursor-pointer"
+              >
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>
+                    [{cat.unit_title.slice(0, 15)}...] {cat.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-[9px] font-black text-slate-450 uppercase tracking-widest">Difficulty Tier</label>
+              <select
+                value={tier}
+                onChange={(e) => setTier(e.target.value as any)}
+                className="w-full bg-slate-950 border border-slate-900 rounded-xl px-4 py-2.5 text-xs text-slate-300 font-bold outline-none focus:border-indigo-500 transition-colors cursor-pointer"
+              >
+                <option value="EXPLORER">EXPLORER (Easy)</option>
+                <option value="VOYAGER">VOYAGER (Medium)</option>
+                <option value="CHALLENGER">CHALLENGER (Hard)</option>
+                <option value="SUMMIT">SUMMIT (Test)</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-[9px] font-black text-slate-450 uppercase tracking-widest">Reward Badge</label>
+              <BadgeEmojiPicker value={badgeEmoji} onChange={setBadgeEmoji} />
+            </div>
+          </div>
+
+          {/* AI Co-Pilot Toggle Panel */}
+          <AICoPilotPanel
+            isOpen={aiPanelOpen}
+            onToggle={() => setAiPanelOpen(!aiPanelOpen)}
+            tier={tier}
+            onGenerateQuestions={(newQuestions) => {
+              setQuestions(newQuestions);
+              displayMessage('AI Questions generated successfully!', 'success');
+            }}
+          />
+
+          {/* Interactive Questions list */}
+          <div className="space-y-6 pt-4 border-t border-slate-800/80">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-black text-white uppercase tracking-wider">
+                Questions Checklist ({questions.length})
+              </h3>
+              
+              <button
+                type="button"
+                onClick={() => setAiPanelOpen(!aiPanelOpen)}
+                className="bg-indigo-650/20 hover:bg-indigo-650/40 text-indigo-300 hover:text-white border border-indigo-500/20 text-[10px] font-black py-2 px-4 rounded-xl cursor-pointer transition-all uppercase tracking-wider"
+              >
+                🤖 AI Co-Pilot
+              </button>
+            </div>
+
+            {questions.length === 0 ? (
+              <div className="p-16 bg-slate-950/20 border border-dashed border-slate-850 rounded-3xl text-center">
+                <span className="text-4xl block filter grayscale opacity-45 select-none mb-3">📋</span>
+                <p className="text-slate-500 text-xs font-medium">
+                  No questions added yet. Click on the widget type buttons on the left to start building.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {questions.map((q, idx) => {
+                  const isCollapsed = !!collapsedQuestions[q.id];
+                  
+                  return (
+                    <ErrorBoundary
+                      key={q.id}
+                      onReset={() => handleResetQuestion(idx)}
+                      onDelete={() => handleRemoveQuestion(idx)}
+                    >
+                      <QuestionCard
+                        question={q}
+                        index={idx}
+                        totalQuestions={questions.length}
+                        isCollapsed={isCollapsed}
+                        onToggleCollapse={() => toggleCollapse(q.id)}
+                        onMoveUp={() => handleMoveQuestion(idx, 'up')}
+                        onMoveDown={() => handleMoveQuestion(idx, 'down')}
+                        onRemove={() => handleRemoveQuestion(idx)}
+                        onDuplicate={() => handleDuplicateQuestion(idx)}
+                        onChange={(fields) => handleQuestionChange(idx, fields)}
+                        onDragStart={(e) => {
+                          setDraggedIndex(idx);
+                          e.dataTransfer.effectAllowed = 'move';
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (draggedIndex === null || draggedIndex === idx) return;
+                          const updated = [...questions];
+                          const [draggedItem] = updated.splice(draggedIndex, 1);
+                          updated.splice(idx, 0, draggedItem);
+                          setQuestions(updated);
+                          setDraggedIndex(null);
+                        }}
+                        onDragOver={() => {}}
+                        onDragEnd={() => setDraggedIndex(null)}
+                        isDragged={draggedIndex === idx}
+                      />
+                    </ErrorBoundary>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Footer controls */}
+          <div className="flex justify-end gap-3 pt-6 border-t border-slate-800/80 font-bold">
+            <button
+              type="button"
+              onClick={handleCancelClick}
+              className="bg-slate-900 hover:bg-slate-855 text-slate-400 hover:text-slate-350 border border-slate-800 text-xs py-2.5 px-6 rounded-xl cursor-pointer transition-all"
+              style={{ minHeight: '40px' }}
+            >
+              Cancel
+            </button>
+            <button
+              id="worksheet-save-btn"
+              type="submit"
+              disabled={saving}
+              className="bg-indigo-650 hover:bg-indigo-600 text-white font-bold text-xs py-2.5 px-6 rounded-xl border border-indigo-500/20 cursor-pointer transition-all disabled:opacity-50"
+              style={{ minHeight: '40px' }}
+            >
+              {saving ? 'Saving...' : 'Save & Publish Worksheet'}
+            </button>
+          </div>
+
+        </div>
       </form>
 
       {/* Modals */}
@@ -691,12 +802,11 @@ export default function WorksheetBuilder({
         tier={tier}
         questions={questions}
       />
-
     </div>
   );
 }
 
-// Inline helper fallback if not passed down via context
+// Inline message display dispatch fallback
 function displayMessage(text: string, type: 'success' | 'error') {
   if (typeof window !== 'undefined') {
     const event = new CustomEvent('lingopeak_message', { detail: { text, type } });

@@ -14,10 +14,16 @@ export function validateQuestion(q: Question, index: number): string | null {
   switch (q.type) {
     case 'multiple_choice':
       if (!q.options || q.options.some(opt => !opt.trim())) {
-        return `${label} (Multiple Choice) must have all 4 options filled out.`;
+        return `${label} (Multiple Choice) must have all options filled out.`;
       }
-      if (!q.answer) {
-        return `${label} (Multiple Choice) must have a correct choice selected.`;
+      if (q.isMulti) {
+        if (!q.answers || q.answers.length === 0) {
+          return `${label} (Multiple Choice) must have at least one correct choice selected.`;
+        }
+      } else {
+        if (!q.answer && (!q.answers || q.answers.length === 0)) {
+          return `${label} (Multiple Choice) must have a correct choice selected.`;
+        }
       }
       break;
 
@@ -25,8 +31,12 @@ export function validateQuestion(q: Question, index: number): string | null {
       if (!q.text?.trim()) {
         return `${label} (Fill in the Gap) text is required.`;
       }
-      if (!q.text.includes('[') || !q.text.includes(']')) {
-        return `${label} (Fill in the Gap) must contain at least one gap in square brackets, e.g., [is].`;
+      {
+        const hasBrackets = q.text.includes('[') && q.text.includes(']');
+        const hasHashes = (q.text.match(/#/g) || []).length >= 2;
+        if (!hasBrackets && !hasHashes) {
+          return `${label} (Fill in the Gap) must contain at least one gap wrapped in # (e.g. #drives#) or square brackets.`;
+        }
       }
       break;
 
@@ -46,8 +56,12 @@ export function validateQuestion(q: Question, index: number): string | null {
       if (!q.sentences || q.sentences.length === 0 || q.sentences.some(s => !s.trim())) {
         return `${label} (Drag & Drop) must have sentences text entered.`;
       }
-      if (q.sentences.every(s => !s.includes('[') || !s.includes(']'))) {
-        return `${label} (Drag & Drop) must have at least one slot wrapped in brackets, e.g. [dog].`;
+      if (q.sentences.every(s => {
+        const b = s.includes('[') && s.includes(']');
+        const h = (s.match(/#/g) || []).length >= 2;
+        return !b && !h;
+      })) {
+        return `${label} (Drag & Drop) must have at least one slot wrapped in # (e.g. #green#) or brackets.`;
       }
       break;
 
@@ -56,29 +70,25 @@ export function validateQuestion(q: Question, index: number): string | null {
         return `${label} (Category Sorting) must have at least 2 categories defined.`;
       }
       if (!q.items || q.items.length === 0 || q.items.some(it => !it.text.trim() || !it.category.trim())) {
-        return `${label} (Category Sorting) must contain valid items matched to sorting bins.`;
+        return `${label} (Category Sorting) must contain valid items matched to sorting categories.`;
       }
       break;
 
     case 'correct_the_mistake': {
       if (!q.text?.trim() || !q.mistake?.trim() || !q.correction?.trim()) {
-        return `${label} (Correct the Mistake) sentence, mistake, and correction words are all required.`;
-      }
-      const cleanWords = q.text.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").split(/\s+/).map(w => w.toLowerCase());
-      if (!cleanWords.includes(q.mistake.toLowerCase())) {
-        return `${label} (Correct the Mistake) mistake word "${q.mistake}" must match one of the words in the sentence.`;
+        return `${label} (Correct the Mistake) must contain an inline mistake e.g., 'incorrect#correct' (e.g. He do#does his homework).`;
       }
       break;
     }
 
     case 'choice_matrix':
       if (!q.rows || q.rows.length === 0 || !q.columns || q.columns.length === 0) {
-        return `${label} (Choice Matrix) must have rows and columns tags defined.`;
+        return `${label} (Choice Matrix) must have rows and columns defined (using statement##column entries).`;
       }
       {
         const mappedRows = Object.keys(q.answers || {});
         if (mappedRows.length !== q.rows.length || mappedRows.some(r => !q.answers![r])) {
-          return `${label} (Choice Matrix) must have correct column selections selected for all rows.`;
+          return `${label} (Choice Matrix) must map a correct column for all rows.`;
         }
       }
       break;
@@ -92,6 +102,12 @@ export function validateQuestion(q: Question, index: number): string | null {
     case 'word_search':
       if (!q.grid || q.grid.length <= 1) {
         return `${label} (Word Search) letter grid must be generated. Click "Auto-Generate Word Search".`;
+      }
+      break;
+
+    case 'order_sentences':
+      if (!q.sentences || q.sentences.length < 2 || q.sentences.some(s => !s.trim())) {
+        return `${label} (Sentence Ordering) must have at least 2 sentences to order.`;
       }
       break;
 

@@ -53,7 +53,8 @@ export default function DragAndDrop({ question, value, onChange }: DragAndDropPr
       {/* Sentences list with slots */}
       <div className="space-y-4 bg-slate-900/20 border border-slate-800/80 rounded-2xl p-6 md:p-8">
         {question.sentences.map((sentence, sIdx) => {
-          const parts = sentence.split(/(\[[^\]]+\])/g);
+          const normalizedSentence = sentence.replace(/#([^#]+)#/g, '[$1]');
+          const parts = normalizedSentence.split(/(\[[^\]]+\])/g);
           let slotCounter = 0;
 
           return (
