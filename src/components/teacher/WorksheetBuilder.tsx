@@ -750,7 +750,6 @@ export default function WorksheetBuilder({
                           setQuestions(updated);
                           setDraggedIndex(null);
                         }}
-                        onDragOver={() => {}}
                         onDragEnd={() => setDraggedIndex(null)}
                         isDragged={draggedIndex === idx}
                       />
