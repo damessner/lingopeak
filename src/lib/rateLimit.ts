@@ -1,5 +1,14 @@
 import { NextRequest } from 'next/server';
 
+/**
+ * In-memory rate limiter for Next.js API routes.
+ *
+ * NOTE: Rate limit counters are stored in memory and will reset on server restart.
+ * This is acceptable for single-instance LXC deployments (the target environment).
+ * For multi-process or serverless deployments, consider replacing with a
+ * SQLite-backed or Redis-backed rate limiter.
+ */
+
 interface RateLimitTracker {
   count: number;
   resetTime: number;

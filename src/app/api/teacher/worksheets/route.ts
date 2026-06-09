@@ -15,6 +15,30 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized: Teacher or Admin access required' }, { status: 403 });
     }
 
+    const { searchParams } = new URL(request.url);
+    const cur = searchParams.get('curriculum');
+
+    if (cur === 'true') {
+      const units = db.prepare('SELECT id, title, order_num FROM units ORDER BY order_num ASC').all() as any[];
+      const categories = db.prepare('SELECT id, name, unit_id FROM categories ORDER BY name ASC').all() as any[];
+      const worksheets = db.prepare('SELECT id, category_id, title, tier, questions_json, badge_emoji, audio_url, image_url, video_url, created_at FROM worksheets').all() as any[];
+      
+      const structuredUnits = units.map(unit => {
+        const unitCats = categories.filter((c: any) => c.unit_id === unit.id).map(cat => {
+          const catWorksheets = worksheets.filter((w: any) => w.category_id === cat.id);
+          return {
+            ...cat,
+            worksheets: catWorksheets
+          };
+        });
+        return {
+          ...unit,
+          categories: unitCats
+        };
+      });
+      return NextResponse.json({ units: structuredUnits });
+    }
+
     // Fetch worksheets with category details
     const worksheets = db.prepare(`
       SELECT w.id, w.title, w.tier, w.category_id, w.questions_json, w.created_at, w.badge_emoji,

@@ -1,9 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { verifySession } from '@/lib/session';
-import db from '@/lib/db';
-import Link from 'next/link';
-import NotificationBell from '@/components/NotificationBell';
+import { query, queryOne, UnitRow } from '@/lib/db-typed';
 
 async function handleLogout() {
   'use server';
@@ -23,20 +21,21 @@ export default async function StudentDashboard() {
   // Fetch student class details
   let className = 'No Class';
   if (session.classId) {
-    const classRecord = db.prepare('SELECT name FROM classes WHERE id = ?').get(session.classId) as any;
+    const classRecord = queryOne<{ name: string }>('SELECT name FROM classes WHERE id = ?', session.classId);
     if (classRecord) className = classRecord.name;
   }
 
   // Fetch unit count for dashboard stats
-  const units = db.prepare('SELECT * FROM units ORDER BY order_num ASC').all() as any[];
+  const units = query<UnitRow>('SELECT * FROM units ORDER BY order_num ASC');
   const totalUnits = units.length;
-  const totalWorksheets = db.prepare(`
+  const totalWorksheets = queryOne<{ count: number }>(`
     SELECT COUNT(DISTINCT w.id) as count
     FROM worksheets w
     JOIN categories c ON w.category_id = c.id
     WHERE w.tier != 'SUMMIT'
-  `).get() as any;
+  `);
   const wsCount = totalWorksheets?.count || 0;
+
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans relative overflow-hidden flex flex-col">

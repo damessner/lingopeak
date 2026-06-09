@@ -1,8 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { verifySession } from '@/lib/session';
-import db from '@/lib/db';
-import Link from 'next/link';
+import { query, queryOne, UnitRow, CategoryRow } from '@/lib/db-typed';
 
 async function handleLogout() {
   'use server';
@@ -20,11 +19,11 @@ export default async function UnitsPage() {
   }
 
   // Fetch all units
-  const units = db.prepare('SELECT * FROM units ORDER BY order_num ASC').all() as any[];
+  const units = query<UnitRow>('SELECT * FROM units ORDER BY order_num ASC');
 
   // For each unit, count total standard worksheets across all categories
-  const unitStats = units.map((unit: any) => {
-    const row = db.prepare(`
+  const unitStats = units.map((unit) => {
+    const row = queryOne<{ total: number; completed: number }>(`
       SELECT 
         COUNT(DISTINCT w.id) as total,
         COUNT(DISTINCT CASE WHEN a.score >= 80 THEN w.id END) as completed
@@ -32,7 +31,7 @@ export default async function UnitsPage() {
       JOIN worksheets w ON w.category_id = c.id AND w.tier != 'SUMMIT'
       LEFT JOIN attempts a ON a.worksheet_id = w.id AND a.student_id = ?
       WHERE c.unit_id = ?
-    `).get(session.userId, unit.id) as any;
+    `, session.userId, unit.id);
 
     return {
       ...unit,
@@ -41,8 +40,8 @@ export default async function UnitsPage() {
     };
   });
 
-  const totalAll = unitStats.reduce((sum: number, u: any) => sum + u.totalWorksheets, 0);
-  const completedAll = unitStats.reduce((sum: number, u: any) => sum + u.completedWorksheets, 0);
+  const totalAll = unitStats.reduce((sum, u) => sum + u.totalWorksheets, 0);
+  const completedAll = unitStats.reduce((sum, u) => sum + u.completedWorksheets, 0);
 
   // Category icons
   const categoryIcons: Record<string, string> = {
@@ -54,9 +53,9 @@ export default async function UnitsPage() {
   };
 
   // Fetch a summary of which categories each unit has
-  const unitCategories = units.map((unit: any) => {
-    const cats = db.prepare('SELECT name FROM categories WHERE unit_id = ? ORDER BY name').all(unit.id) as any[];
-    return { unitId: unit.id, categories: cats.map((c: any) => c.name) };
+  const unitCategories = units.map((unit) => {
+    const cats = query<CategoryRow>('SELECT name FROM categories WHERE unit_id = ? ORDER BY name', unit.id);
+    return { unitId: unit.id, categories: cats.map((c) => c.name) };
   });
 
   return (
@@ -120,8 +119,8 @@ export default async function UnitsPage() {
 
         {/* Unit Blocks */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {unitStats.map((unit: any) => {
-            const cats = unitCategories.find((uc: any) => uc.unitId === unit.id)?.categories || [];
+          {unitStats.map((unit) => {
+            const cats = unitCategories.find((uc) => uc.unitId === unit.id)?.categories || [];
             const allDone = unit.totalWorksheets > 0 && unit.completedWorksheets >= unit.totalWorksheets;
 
             return (
@@ -153,7 +152,7 @@ export default async function UnitsPage() {
 
                 {/* Category chips */}
                 <div className="flex flex-wrap gap-1.5 mb-5">
-                  {cats.map((cat: string) => (
+                  {cats.map((cat) => (
                     <span
                       key={cat}
                       className="text-[10px] bg-slate-950/60 border border-slate-800 font-bold px-2 py-0.5 rounded text-slate-400"
@@ -178,6 +177,7 @@ export default async function UnitsPage() {
             );
           })}
         </div>
+
 
       </main>
 

@@ -38,9 +38,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Username must only contain alphanumeric characters and underscores' }, { status: 400 });
     }
 
-    // Validate password length
-    if (password.length < 4) {
-      return NextResponse.json({ error: 'Password must be at least 4 characters long' }, { status: 400 });
+    // Validate password length and complexity
+    if (password.length < 8) {
+      return NextResponse.json({ error: 'Password must be at least 8 characters long' }, { status: 400 });
+    }
+    if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+      return NextResponse.json({ error: 'Password must contain at least one letter and one number' }, { status: 400 });
     }
 
     // 1. Check if user already exists
@@ -79,17 +82,14 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({ success: true, role: finalRole });
 
     const host = request.headers.get('host')?.split(':')[0] || '';
-    const isIpOrLocalhost = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(host) || host === 'localhost';
+    const isProductionSecure = process.env.NODE_ENV === 'production' && request.headers.get('x-forwarded-proto') === 'https';
     const cookieOptions: any = {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production' && request.headers.get('x-forwarded-proto') === 'https',
+      secure: isProductionSecure,
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: '/',
     };
-    if (!isIpOrLocalhost && host) {
-      cookieOptions.domain = host;
-    }
 
     response.cookies.set('session', sessionToken, cookieOptions);
 

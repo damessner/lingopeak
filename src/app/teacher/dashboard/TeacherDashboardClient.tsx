@@ -115,6 +115,12 @@ export default function TeacherDashboardClient({
   const [newNoteCategory, setNewNoteCategory] = useState('general');
   const [newNotePriority, setNewNotePriority] = useState<'low' | 'normal' | 'high'>('normal');
 
+  // Password Reset Modal state
+  const [passwordResetStudent, setPasswordResetStudent] = useState<{ id: string; username: string } | null>(null);
+  const [resetPasswordValue, setResetPasswordValue] = useState('');
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState('');
+  const [resetPasswordError, setResetPasswordError] = useState('');
+
   const handleOpenNotesModal = async (student: Student) => {
     setSelectedStudentForNotes(student);
     setNotesLoading(true);
@@ -268,21 +274,38 @@ export default function TeacherDashboardClient({
     }
   }, []);
 
-  // 1. Reset student password handler
-  const handleResetPassword = async (studentId: string, username: string) => {
-    const newPassword = prompt(`Enter new password for ${username}:`);
-    if (newPassword === null) return; // cancelled
-    if (newPassword.length < 4) {
-      alert('Password must be at least 4 characters long.');
+  // 1. Reset student password — opens modal (replaces prompt())
+  const handleOpenPasswordReset = (studentId: string, username: string) => {
+    setPasswordResetStudent({ id: studentId, username });
+    setResetPasswordValue('');
+    setResetPasswordConfirm('');
+    setResetPasswordError('');
+  };
+
+  const handlePasswordResetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passwordResetStudent) return;
+
+    if (resetPasswordValue.length < 8) {
+      setResetPasswordError('Password must be at least 8 characters long.');
+      return;
+    }
+    if (!/[a-zA-Z]/.test(resetPasswordValue) || !/[0-9]/.test(resetPasswordValue)) {
+      setResetPasswordError('Password must contain at least one letter and one number.');
+      return;
+    }
+    if (resetPasswordValue !== resetPasswordConfirm) {
+      setResetPasswordError('Passwords do not match.');
       return;
     }
 
     setLoading(true);
+    setResetPasswordError('');
     try {
       const res = await fetch('/api/teacher/students/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId, newPassword })
+        body: JSON.stringify({ studentId: passwordResetStudent.id, newPassword: resetPasswordValue })
       });
 
       if (!res.ok) {
@@ -290,9 +313,10 @@ export default function TeacherDashboardClient({
         throw new Error(data.error || 'Failed to reset password');
       }
 
-      displayMessage(`Password for ${username} reset successfully!`, 'success');
+      displayMessage(`Password for ${passwordResetStudent.username} reset successfully!`, 'success');
+      setPasswordResetStudent(null);
     } catch (err: any) {
-      displayMessage(err.message, 'error');
+      setResetPasswordError(err.message);
     } finally {
       setLoading(false);
     }
@@ -902,7 +926,7 @@ export default function TeacherDashboardClient({
                       </Link>
                       
                       <button
-                        onClick={() => handleResetPassword(st.id, st.username)}
+                        onClick={() => handleOpenPasswordReset(st.id, st.username)}
                         className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] text-slate-400 font-bold py-1 px-3 rounded-lg"
                       >
                         Reset PW
@@ -1064,7 +1088,7 @@ export default function TeacherDashboardClient({
                       </button>
                       
                       <button
-                        onClick={() => handleResetPassword(st.id, st.username)}
+                        onClick={() => handleOpenPasswordReset(st.id, st.username)}
                         className="bg-slate-900 hover:bg-red-950/20 text-[10px] text-slate-400 hover:text-red-300 font-bold border border-slate-800 hover:border-red-500/20 py-1.5 px-3 rounded-lg cursor-pointer"
                       >
                         Reset PW
@@ -1383,6 +1407,71 @@ export default function TeacherDashboardClient({
         )}
 
       </main>
+
+      {/* 🔑 Password Reset Modal */}
+      {passwordResetStudent && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md shadow-2xl">
+            <div className="p-6 border-b border-slate-800/80">
+              <h3 className="text-lg font-black text-white">Reset Password</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Set a new password for <span className="text-indigo-300 font-bold">{passwordResetStudent.username}</span>
+              </p>
+            </div>
+            
+            <form onSubmit={handlePasswordResetSubmit} className="p-6 space-y-4">
+              {resetPasswordError && (
+                <div className="px-4 py-3 bg-red-950/40 border border-red-500/30 text-red-200 text-xs rounded-xl flex items-center gap-2">
+                  <span>⚠️</span>
+                  <span>{resetPasswordError}</span>
+                </div>
+              )}
+              
+              <div>
+                <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">New Password</label>
+                <input
+                  type="password"
+                  required
+                  value={resetPasswordValue}
+                  onChange={(e) => setResetPasswordValue(e.target.value)}
+                  placeholder="Min 8 chars, at least 1 letter & 1 number"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl py-2.5 px-3 text-sm text-white outline-none placeholder-slate-600"
+                />
+                <p className="text-[9px] text-slate-500 mt-1">Must be at least 8 characters with at least one letter and one number.</p>
+              </div>
+              
+              <div>
+                <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">Confirm Password</label>
+                <input
+                  type="password"
+                  required
+                  value={resetPasswordConfirm}
+                  onChange={(e) => setResetPasswordConfirm(e.target.value)}
+                  placeholder="Re-enter the new password"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl py-2.5 px-3 text-sm text-white outline-none placeholder-slate-600"
+                />
+              </div>
+              
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setPasswordResetStudent(null)}
+                  className="flex-1 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold text-xs py-2.5 px-4 rounded-xl border border-slate-700 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 text-white font-bold text-xs py-2.5 px-4 rounded-xl border border-indigo-400/20 transition-all cursor-pointer"
+                >
+                  {loading ? 'Resetting...' : 'Reset Password'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* 📝 Coach Notes Modal */}
       {selectedStudentForNotes && (

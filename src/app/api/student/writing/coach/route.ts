@@ -59,6 +59,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'This writing assignment is already locked and completed' }, { status: 400 });
     }
 
+    // Enforce maximum draft limit (10 versions)
+    const MAX_DRAFTS = 10;
+    if (submission && submission.draft_version >= MAX_DRAFTS) {
+      return NextResponse.json(
+        { error: `Maximum draft versions reached (${MAX_DRAFTS}). Please finalize and submit your writing.` },
+        { status: 400 }
+      );
+    }
+
     // 3. Formulate the LLM prompt with draft history comparison
     let historyContext = '';
     if (submission) {
@@ -166,12 +175,19 @@ Only return valid JSON. Do not include any markdown format tags like \`\`\`json 
         };
       } else {
         // Revision submission (Draft N)
+        const MAX_DRAFTS = 10;
         const newVersion = submission.draft_version + 1;
         const pastTexts = JSON.parse(submission.version_history_json || '[]');
         const pastFeedbacks = JSON.parse(submission.feedback_history_json || '[]');
 
         pastTexts.push(submission.text);
         pastFeedbacks.push(submission.feedback_json);
+
+        // Prune history if it exceeds MAX_DRAFTS
+        if (pastTexts.length > MAX_DRAFTS) {
+          pastTexts.splice(0, pastTexts.length - MAX_DRAFTS);
+          pastFeedbacks.splice(0, pastFeedbacks.length - MAX_DRAFTS);
+        }
 
         db.prepare(`
           UPDATE writing_submissions 
@@ -185,6 +201,7 @@ Only return valid JSON. Do not include any markdown format tags like \`\`\`json 
           JSON.stringify(pastFeedbacks),
           submission.id
         );
+
 
         resultSubmission = {
           id: submission.id,

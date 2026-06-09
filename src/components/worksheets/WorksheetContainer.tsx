@@ -68,6 +68,15 @@ export default function WorksheetContainer({ worksheet, studentId = '', previewM
 
   const activeQuestion = questions[currentIdx];
 
+  // Stop any playing TTS on unmount
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
   // Auto-scroll drawer chat
   useEffect(() => {
     if (isCoachOpen) {
@@ -234,20 +243,33 @@ export default function WorksheetContainer({ worksheet, studentId = '', previewM
           }
           break;
 
-        case 'matching_pairs':
-          // Check if all pairs are matched
-          const totalPairs = Object.keys(q.pairs).length;
-          if (Array.isArray(studentAns) && studentAns.length === totalPairs) {
-            correctCount++;
+        case 'matching_pairs': {
+          // Verify each submitted pair matches the correct key-value pair
+          const pairs = q.pairs as Record<string, string>;
+          const pairKeys = Object.keys(pairs);
+          let allPairsCorrect = true;
+          if (!studentAns || typeof studentAns !== 'object') {
+            allPairsCorrect = false;
+          } else {
+            for (const key of pairKeys) {
+              if (studentAns[key]?.trim().toLowerCase() !== pairs[key].trim().toLowerCase()) {
+                allPairsCorrect = false;
+                break;
+              }
+            }
           }
+          if (allPairsCorrect && pairKeys.length > 0) correctCount++;
           break;
+        }
 
-        case 'word_search':
-          const totalWords = q.words.length;
-          if (Array.isArray(studentAns) && studentAns.length === totalWords) {
-            correctCount++;
-          }
+        case 'word_search': {
+          // Verify all target words were found (q.words is string[], studentAns is string[] of found words)
+          const targetWords: string[] = Array.isArray(q.words) ? q.words : [];
+          const foundWords: string[] = Array.isArray(studentAns) ? studentAns : [];
+          const allFound = targetWords.length > 0 && targetWords.every((w: string) => foundWords.includes(w));
+          if (allFound) correctCount++;
           break;
+        }
 
         case 'order_sentences':
           if (Array.isArray(studentAns) && JSON.stringify(studentAns) === JSON.stringify(q.sentences)) {

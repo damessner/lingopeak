@@ -8,6 +8,7 @@ interface PageProps {
   searchParams: Promise<{
     id?: string;
     categoryId?: string;
+    tier?: string;
   }>;
 }
 
@@ -20,7 +21,7 @@ export default async function BuilderPage({ searchParams }: PageProps) {
     redirect('/login');
   }
 
-  const { id, categoryId } = await searchParams;
+  const { id, categoryId, tier } = await searchParams;
 
   // Fetch Categories with Unit context
   const categories = db.prepare(`
@@ -47,10 +48,12 @@ export default async function BuilderPage({ searchParams }: PageProps) {
       };
     }
   } else if (categoryId) {
+    const validTiers = ['EXPLORER', 'VOYAGER', 'CHALLENGER', 'SUMMIT'];
+    const selectedTier = (tier && validTiers.includes(tier.toUpperCase())) ? (tier.toUpperCase() as any) : 'EXPLORER';
     worksheet = {
       title: '',
       category_id: categoryId,
-      tier: 'EXPLORER' as const,
+      tier: selectedTier,
       questions_json: '[]',
       badge_emoji: '🥇',
       audio_url: '',

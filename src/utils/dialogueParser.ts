@@ -18,14 +18,14 @@ export function parseDialogue(transcript: string | null | undefined): DialogueLi
     const trimmed = line.trim();
     if (!trimmed) return;
 
-    // Check for "Speaker: Message" pattern
-    const colonIdx = trimmed.indexOf(':');
-    if (colonIdx > 0) {
-      const speaker = trimmed.substring(0, colonIdx).trim();
-      const text = trimmed.substring(colonIdx + 1).trim();
+    // Match "Speaker: Message" pattern — speaker must be one or more word chars at start of line
+    const match = trimmed.match(/^([A-Za-z][\w\s]*[A-Za-z]):\s*(.+)$/);
+    if (match) {
+      const speaker = match[1].trim();
+      const text = match[2].trim();
       dialogue.push({ speaker, text });
     } else {
-      // Fallback if no speaker prefix is found on a line (treat as monologue or append to last speaker)
+      // Fallback if no speaker prefix is found on a line
       if (dialogue.length > 0) {
         dialogue[dialogue.length - 1].text += ' ' + trimmed;
       } else {

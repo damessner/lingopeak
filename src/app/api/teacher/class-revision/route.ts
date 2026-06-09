@@ -1,6 +1,8 @@
 import db from '@/lib/db';
 import { generateCompletion } from '@/lib/aiService';
 import { verifySession } from '@/lib/session';
+import { isAnswerCorrect } from '@/lib/scoring';
+import { Question } from '@/lib/worksheet-types';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -28,7 +30,7 @@ export async function POST(request: NextRequest) {
 
     // 2. Fetch struggled attempts in this class (score < 80)
     const attempts = db.prepare(`
-      SELECT a.score, a.answers_json, w.title as worksheet_title, w.questions_json, cat.name as category_name, u.username
+      SELECT a.score, a.answers_json, w.title as worksheet_title, w.questions_json, cat.name as category_name, u.id as student_id
       FROM attempts a
       JOIN users u ON a.student_id = u.id
       JOIN worksheets w ON a.worksheet_id = w.id
@@ -48,33 +50,23 @@ Keep up the good work! Feel free to assign new chapters or worksheets.`
       });
     }
 
-    // 3. Compile struggles context for AI
+    // 3. Compile struggles context for AI — consistently pseudonymize students
+    const studentPseudonyms = new Map<string, string>();
+    let nextPseudonymId = 1;
+
     const strugglesList = attempts.map((att) => {
       let wrongQs = [];
       try {
-        const questions = JSON.parse(att.questions_json);
+        const questions = JSON.parse(att.questions_json) as Question[];
         const answers = JSON.parse(att.answers_json);
 
-        // Find which questions are incorrect
-        // For multiple_choice, check if answers[q.id] !== q.answer
-        // For fill_in_gap, check if answers[q.id] !== q.answer (or similar)
         for (const q of questions) {
           const studentAns = answers[q.id];
-          let isCorrect = false;
-
-          if (q.type === 'multiple_choice') {
-            isCorrect = studentAns === q.answer;
-          } else if (q.type === 'fill_in_gap') {
-            isCorrect = studentAns === q.answer;
-          } else {
-            // Assume incorrect for other types for simplicity or check if score is low
-            isCorrect = att.score > 80;
-          }
-
-          if (!isCorrect) {
+          if (!isAnswerCorrect(q, studentAns)) {
             wrongQs.push({
-              question: q.question || q.text || 'Question text',
-              correctAnswer: q.answer || 'Refer to text',
+              type: q.type,
+              question: q.question || (q as any).text || 'Question text',
+              correctAnswer: (q as any).answer || (q as any).mistake || 'Refer to text',
               studentAnswer: studentAns || 'Skipped/Incorrect'
             });
           }
@@ -83,8 +75,12 @@ Keep up the good work! Feel free to assign new chapters or worksheets.`
         // Fallback if parsing fails
       }
 
+      if (!studentPseudonyms.has(att.student_id)) {
+        studentPseudonyms.set(att.student_id, `Student ${nextPseudonymId++}`);
+      }
+
       return {
-        student: att.username,
+        student: studentPseudonyms.get(att.student_id),
         worksheet: att.worksheet_title,
         category: att.category_name,
         score: att.score,

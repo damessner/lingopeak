@@ -54,15 +54,16 @@ export default async function UnitCategoryPage({ params }: CategoryPageProps) {
       created_at ASC
   `).all(categoryRecord.id) as any[];
 
-  // Check if an AI Summit worksheet already exists for this student in this category
+  // Check if an AI Summit worksheet already exists for THIS student in this category
   let summitWorksheet: any = null;
   try {
     summitWorksheet = db.prepare(`
       SELECT id, title, tier 
       FROM worksheets 
-      WHERE category_id = ? AND tier = 'SUMMIT' 
+      WHERE category_id = ? AND tier = 'SUMMIT' AND (student_id = ? OR student_id IS NULL)
+      ORDER BY created_at DESC
       LIMIT 1
-    `).get(categoryRecord.id) as any;
+    `).get(categoryRecord.id, session.userId) as any;
   } catch (e) {
     console.error('Failed to fetch summit worksheet:', e);
   }

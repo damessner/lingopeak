@@ -39,7 +39,10 @@ export async function POST(request: NextRequest) {
     // 2. Validate password
     if (user.password_salt === 'RESET_REQUIRED') {
       return NextResponse.json(
-        { error: 'Security Upgrade Required: Please contact a teacher or administrator to reset your password.' },
+        { 
+          error: 'Security upgrade required. Your account needs a password reset. Please ask your teacher or administrator to reset your password from the Teacher Dashboard. Your progress and badges are safe and will be preserved.',
+          code: 'RESET_REQUIRED'
+        },
         { status: 403 }
       );
     }
@@ -73,17 +76,14 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({ success: true, role: user.role });
 
     const host = request.headers.get('host')?.split(':')[0] || '';
-    const isIpOrLocalhost = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(host) || host === 'localhost';
+    const isProductionSecure = process.env.NODE_ENV === 'production' && request.headers.get('x-forwarded-proto') === 'https';
     const cookieOptions: any = {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production' && request.headers.get('x-forwarded-proto') === 'https',
+      secure: isProductionSecure,
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: '/',
     };
-    if (!isIpOrLocalhost && host) {
-      cookieOptions.domain = host;
-    }
 
     response.cookies.set('session', sessionToken, cookieOptions);
 

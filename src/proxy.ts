@@ -1,14 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const SESSION_SECRET = process.env.SESSION_SECRET || (process.env.NEXT_PHASE === 'phase-production-build' ? (() => {
-  const arr = new Uint8Array(32);
-  crypto.getRandomValues(arr);
-  return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
-})() : '');
-
-if (!SESSION_SECRET || SESSION_SECRET.length < 32) {
-  throw new Error('CRITICAL CONFIGURATION ERROR: The SESSION_SECRET environment variable must be set and be at least 32 characters long.');
-}
+import { SESSION_SECRET } from '@/lib/env';
 
 async function verifySessionEdge(sessionStr: string | undefined): Promise<any | null> {
   if (!sessionStr) return null;

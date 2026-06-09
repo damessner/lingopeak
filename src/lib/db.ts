@@ -222,6 +222,15 @@ function initDb() {
       console.error('Failed to run MORE! 1 unit migration:', error);
     }
 
+    // 1.9b Add student_id column to worksheets for per-student summit support
+    try {
+      db.prepare('SELECT student_id FROM worksheets LIMIT 1').get();
+    } catch (e) {
+      console.log('Migrating: Adding student_id column to worksheets table...');
+      db.exec('ALTER TABLE worksheets ADD COLUMN student_id TEXT DEFAULT NULL');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_worksheets_student_id ON worksheets(student_id)');
+    }
+
     // 1.9 Refresh Grammar CHALLENGER exemplar (ensure 6-question version)
     try {
       const gramCat = db.prepare(`

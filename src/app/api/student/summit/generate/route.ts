@@ -124,19 +124,19 @@ Do NOT include any markdown commentary, explanation, or tags. Just return a raw,
       );
     }
 
-    // 5. Save the generated Summit worksheet to SQLite linked to this category
-    // Check if a Summit worksheet already exists for this category to overwrite it or create a new one.
-    // For simplicity, delete past summits in this category for this run, so they can regenerate
-    db.prepare("DELETE FROM worksheets WHERE category_id = ? AND tier = 'SUMMIT'").run(categoryId);
+    // 5. Save the generated Summit worksheet per-student (not shared)
+    // Delete only this student's previous summit for this category
+    db.prepare("DELETE FROM worksheets WHERE category_id = ? AND tier = 'SUMMIT' AND student_id = ?").run(categoryId, studentId);
 
     const worksheetId = crypto.randomUUID();
-    db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json) VALUES (?, ?, ?, ?, ?)')
+    db.prepare('INSERT INTO worksheets (id, category_id, title, tier, questions_json, student_id) VALUES (?, ?, ?, ?, ?, ?)')
       .run(
         worksheetId,
         categoryId,
         `${category.name} - Personalized Summit`,
         'SUMMIT',
-        JSON.stringify(generatedQuestions)
+        JSON.stringify(generatedQuestions),
+        studentId
       );
 
     return NextResponse.json({ success: true, worksheetId });
